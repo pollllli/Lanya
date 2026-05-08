@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import StorageService from '../services/StorageService';
 import { logError, formatErrorMessage } from '../utils/ErrorHandler';
 
@@ -181,18 +183,21 @@ const ProfileScreen = ({ navigation, route }) => {
       const backupData = await StorageService.exportAllData();
       const backupJson = JSON.stringify(backupData, null, 2);
       
-      // 这里可以添加保存到文件的功能
-      // 由于Expo的限制，我们可以先显示备份内容
+      const fileName = `device_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      const fileUri = FileSystem.documentDirectory + fileName;
+      
+      await FileSystem.writeAsStringAsync(fileUri, backupJson);
+      
       Alert.alert(
         '数据备份',
-        `备份成功！\n\n导出时间: ${backupData.exportDate}\n\n备份内容已准备就绪，包含所有器件、用户和BOM数据。`,
+        `备份成功！\n\n文件: ${fileName}\n导出时间: ${backupData.exportDate}\n\n备份内容已保存，包含所有器件、用户和BOM数据。\n\n您可以在文件管理器中找到这个文件并分享给其他设备。`,
         [
           { text: '确定' }
         ]
       );
     } catch (error) {
       logError('备份数据失败', error, 'ProfileScreen.handleBackupData');
-      Alert.alert('错误', '备份数据失败，请重试');
+      Alert.alert('错误', `备份数据失败: ${error.message || '请重试'}`);
     }
   };
 
@@ -208,18 +213,39 @@ const ProfileScreen = ({ navigation, route }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // 这里可以添加从文件选择备份数据的功能
-              // 由于Expo的限制，我们可以先使用模拟数据
+              const result = await DocumentPicker.getDocumentAsync({
+                type: 'application/json',
+                copyToCacheDirectory: true,
+              });
+
+              if (result.canceled) {
+                return;
+              }
+
+              const fileUri = result.assets[0].uri;
+              const fileContent = await FileSystem.readAsStringAsync(fileUri);
+              const backupData = JSON.parse(fileContent);
+              
+              await StorageService.importAllData(backupData);
+              
               Alert.alert(
-                '数据恢复',
-                '请选择备份文件进行恢复。\n\n注意：此功能需要文件系统权限，目前仅作为演示。',
+                '成功',
+                '数据恢复成功！\n\n应用将重启以加载新数据。',
                 [
-                  { text: '确定' }
+                  { 
+                    text: '确定',
+                    onPress: () => {
+                      navigation.reset({
+                        index: 0,
+                        routes: [{ name: 'Login' }],
+                      });
+                    }
+                  }
                 ]
               );
             } catch (error) {
               logError('恢复数据失败', error, 'ProfileScreen.handleRestoreData');
-              Alert.alert('错误', '恢复数据失败，请重试');
+              Alert.alert('错误', `恢复数据失败: ${error.message || '请检查文件格式并重试'}`);
             }
           }
         }

@@ -136,84 +136,86 @@ const AppNavigator = () => {
   }
 
   return (
-    <Stack.Navigator 
-      initialRouteName={initialRoute}
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: '#f5f5f5',
-          elevation: 0,
-          shadowOpacity: 0,
-          borderBottomWidth: 1,
-          borderBottomColor: '#e0e0e0',
-        },
-        headerTintColor: '#333',
-        headerTitleStyle: {
-          fontWeight: '600',
-          fontSize: 18,
-        },
-        headerBackTitleVisible: false,
-        headerLeftContainerStyle: {
-          paddingLeft: 8,
-        },
-        transitionSpec: {
-          open: {
-            animation: 'timing',
-            config: {
-              duration: 300,
+    <NavigationContainer>
+      <Stack.Navigator 
+        initialRouteName={initialRoute}
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: '#f5f5f5',
+            elevation: 0,
+            shadowOpacity: 0,
+            borderBottomWidth: 1,
+            borderBottomColor: '#e0e0e0',
+          },
+          headerTintColor: '#333',
+          headerTitleStyle: {
+            fontWeight: '600',
+            fontSize: 18,
+          },
+          headerBackTitleVisible: false,
+          headerLeftContainerStyle: {
+            paddingLeft: 8,
+          },
+          transitionSpec: {
+            open: {
+              animation: 'timing',
+              config: {
+                duration: 300,
+              },
+            },
+            close: {
+              animation: 'timing',
+              config: {
+                duration: 300,
+              },
             },
           },
-          close: {
-            animation: 'timing',
-            config: {
-              duration: 300,
-            },
-          },
-        },
-      }}
-    >
-      <Stack.Screen 
-        name="Login" 
-        component={LoginScreen} 
-        options={{ 
-          title: '登录',
-          headerShown: false,
-        }} 
-      />
-      <Stack.Screen 
-        name="MainTabs" 
-        options={{ headerShown: false }} 
+        }}
       >
-        {(props) => (
-          <MainTabNavigator 
-            {...props} 
-            route={{
-              ...props.route,
-              params: {
-                ...props.route.params,
-                isAdmin: props.route.params?.isAdmin || loggedInUser?.isAdmin || false,
-                username: props.route.params?.username || loggedInUser?.username || 'user'
-              }
-            }}
-          />
-        )}
-      </Stack.Screen>
-      <Stack.Screen 
-        name="DeviceDetail" 
-        component={DeviceDetailScreen} 
-        options={{ 
-          title: '器件详情',
-          headerBackTitle: '返回',
-        }} 
-      />
-      <Stack.Screen 
-        name="AdminEdit" 
-        component={AdminEditScreen} 
-        options={({ route }) => ({
-          title: route.params?.isNew ? '上架器件' : '编辑器件',
-          headerBackTitle: '返回',
-        })} 
-      />
-    </Stack.Navigator>
+        <Stack.Screen 
+          name="Login" 
+          component={LoginScreen} 
+          options={{ 
+            title: '登录',
+            headerShown: false,
+          }} 
+        />
+        <Stack.Screen 
+          name="MainTabs" 
+          options={{ headerShown: false }} 
+        >
+          {(props) => (
+            <MainTabNavigator 
+              {...props} 
+              route={{
+                ...props.route,
+                params: {
+                  ...props.route.params,
+                  isAdmin: props.route.params?.isAdmin || loggedInUser?.isAdmin || false,
+                  username: props.route.params?.username || loggedInUser?.username || 'user'
+                }
+              }}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen 
+          name="DeviceDetail" 
+          component={DeviceDetailScreen} 
+          options={{ 
+            title: '器件详情',
+            headerBackTitle: '返回',
+          }} 
+        />
+        <Stack.Screen 
+          name="AdminEdit" 
+          component={AdminEditScreen} 
+          options={({ route }) => ({
+            title: route.params?.isNew ? '上架器件' : '编辑器件',
+            headerBackTitle: '返回',
+          })}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 };
 

@@ -1,106 +1,152 @@
+/* eslint-disable prettier/prettier */
+const FRAME_HEADER_1 = 0x55;
+const FRAME_HEADER_2 = 0xAA;
+const FRAME_MIN_LENGTH = 6;
+
+const COMMANDS = {
+  HEARTBEAT: 0x00,
+  LIGHT_ON: 0x01,
+  LIGHT_OFF: 0x02,
+  CONTROL_ALL_LIGHTS: 0x03,
+  RESPONSE_HEARTBEAT: 0x80,
+  RESPONSE_LIGHT_ON: 0x81,
+  RESPONSE_LIGHT_OFF: 0x82,
+  RESPONSE_CONTROL_ALL: 0x83,
+};
+
+function reverseByte(byte) {
+  let result = 0;
+  for (let i = 0; i < 8; i++) {
+    result = (result << 1) | ((byte >> i) & 0x01);
+  }
+  return result;
+}
+
+function generateCRCTable() {
+  const table = new Uint8Array(256);
+  const polynomial = 0x31;
+
+  for (let i = 0; i < 256; i++) {
+    let crc = reverseByte(i);
+    for (let j = 0; j < 8; j++) {
+      crc = (crc << 1) ^ (crc & 0x80 ? polynomial : 0);
+    }
+    table[i] = reverseByte(crc & 0xFF);
+  }
+  return table;
+}
+
+const CRCTable = generateCRCTable();
+
 class CommandBuilder {
-  // CRC8校验计算（MAXIM算法）
+  constructor() {
+    this.header1 = FRAME_HEADER_1;
+    this.header2 = FRAME_HEADER_2;
+    this.crcTable = CRCTable;
+  }
+
   calculateCRC8(data) {
-    let crc = 0;
+    let crc = 0x00;
     for (let i = 0; i < data.length; i++) {
-      crc ^= data[i];
-      for (let j = 0; j < 8; j++) {
-        if (crc & 0x80) {
-          crc = (crc << 1) ^ 0x31; // MAXIM多项式: x8+x5+x4+1
-        } else {
-          crc <<= 1;
-        }
-        crc &= 0xFF;
-      }
+      crc = this.crcTable[crc ^ data[i]];
     }
     return crc;
   }
 
-  // 构建命令帧
-  buildCommandFrame(cmd, data = []) {
-    // 帧头
-    const header = [0x55, 0xAA];
-    // 命令字
-    const commandWord = cmd;
-    // 数据长度
-    const dataLength = data.length;
-    // 构建帧
-    let frame = [...header, commandWord, dataLength, ...data];
-    // 计算CRC8校验
+  buildFrame(command, data = []) {
+    const length = data.length;
+    const frame = [this.header1, this.header2, command, length, ...data];
     const crc = this.calculateCRC8(frame);
-    // 添加CRC
-    frame = [...frame, crc];
-    // 确保帧长度为6字节（12个十六进制数字）
-    while (frame.length < 6) {
-      frame.push(0x00);
-    }
-    // 截断到6字节（确保不超过）
-    frame = frame.slice(0, 6);
-    // 返回完整帧
+    frame.push(crc);
     return frame;
   }
 
-  // 解析响应帧
-  parseResponseFrame(data) {
-    if (data.length < 6) {
-      throw new Error('响应帧长度不足');
-    }
-
-    // 检查帧头
-    if (data[0] !== 0x55 || data[1] !== 0xAA) {
-      throw new Error('响应帧头错误');
-    }
-
-    // 命令字
-    const cmd = data[2];
-    // 数据长度
-    const dataLength = data[3];
-    // 数据
-    const responseData = data.slice(4, 4 + dataLength);
-    // 校验
-    const crc = data[4 + dataLength];
-
-    // 验证校验
-    const frameToCheck = data.slice(0, 4 + dataLength);
-    const calculatedCrc = this.calculateCRC8(frameToCheck);
-    if (crc !== calculatedCrc) {
-      throw new Error('响应帧校验错误');
-    }
-
-    return {
-      cmd,
-      data: responseData,
-      success: true
-    };
+  buildHeartbeatCommand() {
+    const highByte = 0x00;
+    const lowByte = 0x01;
+    const data = [highByte, lowByte];
+    const frame = this.buildFrame(COMMANDS.HEARTBEAT, data);
+    return frame;
   }
 
-  // 构建常用命令
   buildLightOnCommand(lightId) {
-    // 确保lightId是有效的字节值（0-255）
-    const validLightId = parseInt(lightId) & 0xFF;
-    return this.buildCommandFrame(0x01, [validLightId]);
+    const highByte = (lightId >> 8) & 0xFF;
+    const lowByte = lightId & 0xFF;
+    const data = [highByte, lowByte];
+    const frame = this.buildFrame(COMMANDS.LIGHT_ON, data);
+    return frame;
   }
 
   buildLightOffCommand(lightId) {
-    // 确保lightId是有效的字节值（0-255）
-    const validLightId = parseInt(lightId) & 0xFF;
-    return this.buildCommandFrame(0x02, [validLightId]);
+    const highByte = (lightId >> 8) & 0xFF;
+    const lowByte = lightId & 0xFF;
+    const data = [highByte, lowByte];
+    const frame = this.buildFrame(COMMANDS.LIGHT_OFF, data);
+    return frame;
   }
 
   buildControlAllLightsCommand(state) {
-    return this.buildCommandFrame(0x03, [state ? 0xFF : 0x00]);
+    const value = state ? 0xFFFF : 0x0000;
+    const highByte = (value >> 8) & 0xFF;
+    const lowByte = value & 0xFF;
+    const data = [highByte, lowByte];
+    const frame = this.buildFrame(COMMANDS.CONTROL_ALL_LIGHTS, data);
+    return frame;
   }
 
-  buildHeartbeatCommand() {
-    return this.buildCommandFrame(0x00, []);
+  parseResponse(response) {
+    if (!response || response.length < FRAME_MIN_LENGTH) {
+      return null;
+    }
+
+    if (response[0] !== this.header1 || response[1] !== this.header2) {
+      return null;
+    }
+
+    const crc = this.calculateCRC8(response.slice(0, -1));
+    if (crc !== response[response.length - 1]) {
+      return null;
+    }
+
+    const command = response[2];
+    const length = response[3];
+
+    if (4 + length > response.length - 1) {
+      return null;
+    }
+
+    const data = response.slice(4, 4 + length);
+
+    return {
+      command: command,
+      length: length,
+      data: data,
+      isValid: true,
+    };
   }
 
-  // 构建请求器件命令
-  buildRequestDeviceCommand(deviceId) {
-    // 确保deviceId是有效的字节值（0-255）
-    const validDeviceId = parseInt(deviceId) & 0xFF;
-    return this.buildCommandFrame(0x04, [validDeviceId]);
+  isValidFrame(frame) {
+    if (!frame || frame.length < FRAME_MIN_LENGTH) {
+      return false;
+    }
+
+    if (frame[0] !== this.header1 || frame[1] !== this.header2) {
+      return false;
+    }
+
+    const crc = this.calculateCRC8(frame.slice(0, -1));
+    return crc === frame[frame.length - 1];
+  }
+
+  getCommandName(command) {
+    for (const [name, value] of Object.entries(COMMANDS)) {
+      if (value === command) {
+        return name;
+      }
+    }
+    return 'UNKNOWN';
   }
 }
 
 export default CommandBuilder;
+export { COMMANDS };

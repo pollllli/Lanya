@@ -127,9 +127,8 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   useEffect(() => {
     loadDevices();
     loadSearchHistory();
-    // 初始检查连接状态
     checkConnectionStatus();
-  }, [loadDevices, loadSearchHistory, checkConnectionStatus]);
+  }, []);
 
   // 当页面获得焦点时重新加载设备数据
   useFocusEffect(
@@ -193,17 +192,12 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   }, [dispatch]);
 
   useEffect(() => {
-    if (searchQuery.trim() === '') {
-      dispatch({ type: 'SET_FILTERED_DEVICES', payload: devices });
-      dispatch({ type: 'SET_SHOW_SUGGESTIONS', payload: false });
-    } else {
-      // 生成搜索建议
+    if (searchQuery.trim() !== '') {
       handleGenerateSearchSuggestions(searchQuery);
-      
-      const filtered = filterDevices(devices, searchQuery, selectedShelf);
-      dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
+    } else {
+      dispatch({ type: 'SET_SHOW_SUGGESTIONS', payload: false });
     }
-  }, [devices, searchQuery, selectedShelf, handleGenerateSearchSuggestions, dispatch]);
+  }, [searchQuery, handleGenerateSearchSuggestions, dispatch]);
 
   const handleGenerateSearchSuggestions = useCallback((query) => {
     if (!query.trim()) {
@@ -273,8 +267,8 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
   }, [dispatch]);
 
-  // 请求器件
-  const requestDevice = useCallback(async (device) => {
+  // 请求器件（点亮对应灯）
+  const requestDevice = useCallback(async (device, hardwarePosition) => {
     try {
       // 检查是否有蓝牙连接
       if (!isConnected || !global.deviceConnection) {
@@ -282,10 +276,10 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
         return;
       }
 
-      // 构建请求命令 - 使用requestDevice命令并指定具体的器件ID
+      // 构建请求命令 - 使用硬件位置作为灯ID
       const requestCommand = {
-        type: 'requestDevice',
-        deviceId: device.id
+        type: 'lightOn',
+        lightId: hardwarePosition
       };
 
       // 使用全局蓝牙连接发送命令
@@ -293,8 +287,8 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       const response = await handler.sendCommand(requestCommand);
 
       if (response.success) {
-        Alert.alert('成功', `已发送器件请求: ${device.name}`);
-        showSuccessMessage(`已请求器件: ${device.name}`);
+        Alert.alert('成功', `已发送器件请求: ${device.name} (位置: ${hardwarePosition})`);
+        showSuccessMessage(`已请求器件: ${device.name} (位置: ${hardwarePosition})`);
       } else {
         Alert.alert('错误', `请求器件失败: ${response.message}`);
       }
@@ -314,6 +308,58 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   const memoizedSearchSuggestions = useMemo(() => {
     return generateSearchSuggestions(searchQuery, devices, searchHistory, 5);
   }, [devices, searchHistory, searchQuery]);
+
+  // 点亮所有灯
+  const handleControlAllLightsOn = useCallback(async () => {
+    if (!isConnected || !global.deviceConnection) {
+      Alert.alert('提示', '请先在连接页面连接蓝牙设备');
+      return;
+    }
+
+    try {
+      const { handler } = global.deviceConnection;
+      const response = await handler.sendCommand({
+        type: 'controlAll',
+        state: true
+      });
+
+      if (response.success) {
+        Alert.alert('成功', '已点亮所有灯');
+        showSuccessMessage('已点亮所有灯');
+      } else {
+        Alert.alert('错误', `操作失败: ${response.message}`);
+      }
+    } catch (error) {
+      logError('控制所有灯失败', error, 'DeviceListScreen.handleControlAllLightsOn');
+      Alert.alert('错误', '发送命令失败，请检查设备连接');
+    }
+  }, [isConnected, showSuccessMessage]);
+
+  // 熄灭所有灯
+  const handleControlAllLightsOff = useCallback(async () => {
+    if (!isConnected || !global.deviceConnection) {
+      Alert.alert('提示', '请先在连接页面连接蓝牙设备');
+      return;
+    }
+
+    try {
+      const { handler } = global.deviceConnection;
+      const response = await handler.sendCommand({
+        type: 'controlAll',
+        state: false
+      });
+
+      if (response.success) {
+        Alert.alert('成功', '已熄灭所有灯');
+        showSuccessMessage('已熄灭所有灯');
+      } else {
+        Alert.alert('错误', `操作失败: ${response.message}`);
+      }
+    } catch (error) {
+      logError('控制所有灯失败', error, 'DeviceListScreen.handleControlAllLightsOff');
+      Alert.alert('错误', '发送命令失败，请检查设备连接');
+    }
+  }, [isConnected, showSuccessMessage]);
 
   const handleDevicePress = useCallback((device) => {
     navigation.navigate('DeviceDetail', { device, isAdmin });
@@ -447,8 +493,9 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     });
   }, [dispatch, successAnimation]);
 
-  const renderDeviceItem = useCallback(({ item }) => {
+  const renderDeviceItem = useCallback(({ item, index }) => {
     const isSelected = selectedDevices.includes(item.id);
+    const hardwarePosition = devices.findIndex(d => d.id === item.id) + 1;
     
     const handlePress = () => {
       if (isSelectionMode) {
@@ -484,14 +531,14 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
           {/* 请求器件按钮 */}
           <TouchableOpacity 
             style={styles.requestButton}
-            onPress={() => requestDevice(item)}
+            onPress={() => requestDevice(item, hardwarePosition)}
           >
             <Text style={styles.requestButtonText}>请求器件</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
-  }, [selectedDevices, isSelectionMode, toggleDeviceSelection, handleDevicePress, requestDevice]);
+  }, [selectedDevices, isSelectionMode, toggleDeviceSelection, handleDevicePress, requestDevice, devices]);
 
   // 上架器件功能
   const handleAddDevice = useCallback(() => {
@@ -655,6 +702,22 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
         </View>
       )}
       
+      {/* 控制所有灯按钮 */}
+      <View style={styles.controlAllButtonsContainer}>
+        <TouchableOpacity 
+          style={[styles.controlAllButton, styles.controlAllOnButton]} 
+          onPress={handleControlAllLightsOn}
+        >
+          <Text style={styles.controlAllButtonText}>点亮所有灯</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.controlAllButton, styles.controlAllOffButton]} 
+          onPress={handleControlAllLightsOff}
+        >
+          <Text style={styles.controlAllButtonText}>熄灭所有灯</Text>
+        </TouchableOpacity>
+      </View>
+      
       {/* 设备标签列表 */}
       <ScrollView style={styles.tagsContainer} showsVerticalScrollIndicator={true}>
         {isLoading ? (
@@ -664,9 +727,9 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
           </View>
         ) : memoizedFilteredDevices.length > 0 ? (
           <View style={styles.tagsGrid}>
-            {memoizedFilteredDevices.map((item) => (
+            {memoizedFilteredDevices.map((item, index) => (
               <View key={item.id} style={styles.tagWrapper}>
-                {renderDeviceItem({ item })}
+                {renderDeviceItem({ item, index })}
               </View>
             ))}
             {/* 添加一个底部空白，确保最后一行标签完全可见 */}
@@ -1338,6 +1401,39 @@ const styles = StyleSheet.create({
   requestButtonText: {
     color: 'white',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  // 控制所有灯按钮样式
+  controlAllButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  controlAllButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  controlAllOnButton: {
+    backgroundColor: '#4caf50',
+  },
+  controlAllOffButton: {
+    backgroundColor: '#f44336',
+  },
+  controlAllButtonText: {
+    color: 'white',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

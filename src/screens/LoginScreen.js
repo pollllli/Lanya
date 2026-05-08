@@ -10,25 +10,19 @@ const LoginScreen = ({ navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // 处理登录
   const handleLogin = async () => {
     try {
-      // 从存储中获取用户数据
       const users = await StorageService.getUsers();
       
-      // 验证用户
       const user = users.find(u => u.username === username && u.password === password);
       
       if (user) {
-        // 登录成功，保存用户信息
         await StorageService.saveLoggedInUser(user);
-        // 导航到主界面
         navigation.navigate('MainTabs', {
           isAdmin: user.isAdmin || false,
           username: user.username
         });
       } else {
-        // 登录失败
         Alert.alert('登录失败', '用户名或密码错误');
       }
     } catch (error) {
@@ -37,10 +31,8 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
-  // 处理注册
   const handleRegister = async () => {
     try {
-      // 验证输入
       if (!username.trim() || !password.trim()) {
         Alert.alert('注册失败', '用户名和密码不能为空');
         return;
@@ -51,16 +43,13 @@ const LoginScreen = ({ navigation }) => {
         return;
       }
       
-      // 从存储中获取用户数据
       const users = await StorageService.getUsers();
       
-      // 检查用户名是否已存在
       if (users.some(u => u.username === username)) {
         Alert.alert('注册失败', '用户名已存在');
         return;
       }
       
-      // 添加新用户
       const newUser = {
         username,
         password,
@@ -255,7 +244,7 @@ const styles = StyleSheet.create({
     marginTop: 40,
   },
   loginButton: {
-    backgroundColor: '#1976d2',
+    backgroundColor: '#5eafffff',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
@@ -267,7 +256,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   registerButton: {
-    backgroundColor: '#4caf50',
+    backgroundColor: '#55cd59ff',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',

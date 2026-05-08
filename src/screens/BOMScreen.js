@@ -238,10 +238,11 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       const device = devices.find(d => d.supplierId === component.supplierId || d.id.toString() === component.supplierId);
       if (device) {
         try {
+          const hardwarePosition = devices.findIndex(d => d.id === device.id) + 1;
           const { handler } = global.deviceConnection;
           const response = await handler.sendCommand({
-            type: 'requestDevice',
-            deviceId: device.id
+            type: 'lightOn',
+            lightId: hardwarePosition
           });
           if (response.success) {
             Alert.alert('成功', `已请求器件: ${component.name}\n对应位置灯已亮起`);

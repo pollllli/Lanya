@@ -232,24 +232,26 @@ const AdminEditScreen = ({ navigation, route }) => {
         id: state.id || Date.now()
       };
 
+      let savedDevice;
       if (isNew) {
         try {
-          await StorageService.addDevice(deviceData);
+          savedDevice = await StorageService.addDevice(deviceData);
           Alert.alert('成功', '器件上架成功');
         } catch (error) {
           if (error.message && error.message.includes('器件编号')) {
             Alert.alert('错误', error.message);
+            return;
           } else {
             throw error;
           }
         }
       } else {
-        await StorageService.updateDevice(deviceData);
+        savedDevice = await StorageService.updateDevice(deviceData);
         Alert.alert('成功', '器件更新成功');
       }
 
       if (onSave) {
-        onSave();
+        onSave(savedDevice);
       }
 
       navigation.goBack();

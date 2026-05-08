@@ -1,7 +1,6 @@
 import { Platform } from 'react-native';
 import CommandBuilder from './CommandBuilder';
 
-// 为React Native环境添加Base64编码/解码支持
 if (typeof btoa === 'undefined') {
   global.btoa = function(str) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
@@ -40,7 +39,6 @@ if (typeof atob === 'undefined') {
   };
 }
 
-// 条件导入 BleManager，仅在非 Web 平台使用
 let BleManager, ScanMode;
 if (Platform.OS !== 'web') {
   const blePlx = require('react-native-ble-plx');
@@ -55,10 +53,9 @@ class BluetoothHandler {
     this.manager = null;
     this.isScanning = false;
     this.isInitialized = false;
-    // 对于CH9140BLE2U设备，使用已知的服务和特征UUID
-    this.serviceUUID = '0000fff0-0000-1000-8000-00805f9b34fb'; // 小写UUID
-    this.writeCharacteristicUUID = '0000fff1-0000-1000-8000-00805f9b34fb'; // FFF1是写入特征
-    this.readCharacteristicUUID = '0000fff2-0000-1000-8000-00805f9b34fb'; // FFF2是读取特征
+    this.serviceUUID = '0000fff0-0000-1000-8000-00805f9b34fb';
+    this.writeCharacteristicUUID = '0000fff1-0000-1000-8000-00805f9b34fb';
+    this.readCharacteristicUUID = '0000fff2-0000-1000-8000-00805f9b34fb';
     console.log('=== 蓝牙处理器初始化 ===');
     console.log('服务UUID:', this.serviceUUID);
     console.log('写入特征UUID:', this.writeCharacteristicUUID);
@@ -74,8 +71,6 @@ class BluetoothHandler {
       }
       
       this.manager = new BleManager();
-      // 移除isBluetoothEnabled检查，因为在新版本的react-native-ble-plx中这个方法不存在
-      // 蓝牙状态检查会在扫描时自动处理
       this.isInitialized = true;
       console.log('蓝牙初始化成功');
       return { success: true, message: '蓝牙初始化成功' };
@@ -158,7 +153,6 @@ class BluetoothHandler {
       this.connectedDevice = device;
       console.log('设备保存成功');
       
-      // 发现并打印所有服务和特征
       await this.discoverServicesAndCharacteristics(device);
       
       console.log('=== 设备连接完成 ===');
@@ -172,7 +166,6 @@ class BluetoothHandler {
     }
   }
 
-  // 发现并打印所有服务和特征
   async discoverServicesAndCharacteristics(device) {
     try {
       if (Platform.OS === 'web') {
@@ -184,7 +177,6 @@ class BluetoothHandler {
       const services = await device.services();
       console.log('发现的服务数量:', services.length);
       
-      // 寻找可写的特征
       let foundWritableCharacteristic = null;
       let foundReadableCharacteristic = null;
       
@@ -205,7 +197,6 @@ class BluetoothHandler {
           console.log('  可通知属性:', characteristic.isNotifiable);
           console.log('  可指示属性:', characteristic.isIndicatable);
           
-          // 寻找可写的特征
           if (!foundWritableCharacteristic && (characteristic.isWritableWithResponse || characteristic.isWritableWithoutResponse)) {
             foundWritableCharacteristic = {
               serviceUUID: service.uuid,
@@ -216,7 +207,6 @@ class BluetoothHandler {
             console.log('  找到可写特征:', foundWritableCharacteristic);
           }
           
-          // 寻找可读的特征
           if (!foundReadableCharacteristic && characteristic.isReadable) {
             foundReadableCharacteristic = {
               serviceUUID: service.uuid,
@@ -227,7 +217,6 @@ class BluetoothHandler {
         }
       }
       
-      // 如果找到可写特征，更新配置
       if (foundWritableCharacteristic) {
         this.serviceUUID = foundWritableCharacteristic.serviceUUID;
         this.writeCharacteristicUUID = foundWritableCharacteristic.characteristicUUID;
@@ -236,7 +225,6 @@ class BluetoothHandler {
         console.log('写入特征UUID:', this.writeCharacteristicUUID);
       }
       
-      // 如果找到可读特征，更新配置
       if (foundReadableCharacteristic) {
         this.readCharacteristicUUID = foundReadableCharacteristic.characteristicUUID;
         console.log('=== 更新为找到的可读特征 ===');
@@ -271,7 +259,6 @@ class BluetoothHandler {
       console.log('设备ID:', deviceId);
       console.log('命令类型:', command.type);
       
-      // 检查必要的参数
       if (!deviceId || !this.serviceUUID || !this.writeCharacteristicUUID) {
         console.error('缺少必要的参数:', { deviceId, serviceUUID: this.serviceUUID, characteristicUUID: this.writeCharacteristicUUID });
         return {
@@ -282,7 +269,6 @@ class BluetoothHandler {
       
       console.log('使用的UUID:', { serviceUUID: this.serviceUUID, characteristicUUID: this.writeCharacteristicUUID });
       
-      // 构建命令帧
       let frame;
       if (command.type === 'lightOn') {
         frame = this.commandBuilder.buildLightOnCommand(command.lightId || 1);
@@ -291,17 +277,13 @@ class BluetoothHandler {
       } else if (command.type === 'heartbeat') {
         frame = this.commandBuilder.buildHeartbeatCommand();
       } else if (command.type === 'controlAll') {
-        frame = this.commandBuilder.buildControlAllLightsCommand(command.state || true);
-      } else if (command.type === 'requestDevice') {
-        frame = this.commandBuilder.buildRequestDeviceCommand(command.deviceId || 1);
+        frame = this.commandBuilder.buildControlAllLightsCommand(command.state !== undefined ? command.state : true);
       } else {
-        // 默认发送心跳命令
         frame = this.commandBuilder.buildHeartbeatCommand();
       }
       
       console.log('构建的命令帧:', frame);
       
-      // 发送原始字节帧
       try {
         console.log('=== 开始发送命令 ===');
         console.log('设备ID:', deviceId);
@@ -311,9 +293,7 @@ class BluetoothHandler {
         console.log('命令帧长度:', frame.length);
         console.log('命令帧Hex:', frame.map(b => b.toString(16).padStart(2, '0')).join(' '));
         
-        // 检查设备连接状态
         try {
-          // 直接使用已连接的设备对象
           const isConnected = await this.connectedDevice.isConnected();
           console.log('设备连接状态:', isConnected);
           if (!isConnected) {
@@ -327,9 +307,7 @@ class BluetoothHandler {
           console.error('检查设备连接状态失败:', error);
         }
         
-        // 获取特征对象，检查其属性
         try {
-          // 直接使用已连接的设备对象
           const services = await this.connectedDevice.services();
           console.log('发现的服务数量:', services.length);
           for (const service of services) {
@@ -367,11 +345,9 @@ class BluetoothHandler {
           console.error('获取特征对象失败:', error);
         }
         
-        // 将命令帧转换为Base64编码
         const base64Data = this.bytesToBase64(frame);
         console.log('字节帧Base64编码:', base64Data);
         
-        // 尝试使用无响应写入（大多数设备推荐）
         console.log('尝试使用无响应写入...');
         try {
           await this.manager.writeCharacteristicWithoutResponseForDevice(
@@ -383,7 +359,6 @@ class BluetoothHandler {
           console.log('无响应写入成功');
         } catch (error) {
           console.error('无响应写入失败:', error);
-          // 如果无响应写入失败，尝试有响应写入
           console.log('尝试使用有响应写入...');
           try {
             await this.manager.writeCharacteristicWithResponseForDevice(
@@ -395,10 +370,8 @@ class BluetoothHandler {
             console.log('有响应写入成功');
           } catch (responseError) {
             console.error('有响应写入失败:', responseError);
-            // 尝试使用设备对象直接写入
             console.log('尝试使用设备对象直接写入...');
             try {
-              // 直接使用已连接的设备对象
               const services = await this.connectedDevice.services();
               const service = services.find(s => s.uuid === this.serviceUUID);
               if (service) {
@@ -430,7 +403,7 @@ class BluetoothHandler {
         console.log('发送命令成功');
         console.log('=== 发送命令完成 ===');
         return {
-          cmd: frame[2] | 0x80, // 响应命令字 = 原命令字 | 0x80
+          cmd: frame[2] | 0x80,
           data: [0x01],
           success: true
         };
@@ -447,7 +420,6 @@ class BluetoothHandler {
     } catch (error) {
       console.error('发送命令失败:', error);
       console.error('错误详情:', error.message, error.stack);
-      // 返回失败响应，而不是抛出异常，避免应用闪退
       return {
         success: false,
         message: error.message || '发送命令失败'
@@ -474,50 +446,40 @@ class BluetoothHandler {
     }
   }
 
-  // 将字节数组转换为Base64编码
   bytesToBase64(bytes) {
-    // 确保所有字节都在0-255范围内
     const clampedBytes = bytes.map(byte => byte & 0xFF);
     console.log('要编码的字节数组:', clampedBytes);
     
-    // 使用React Native兼容的方式将字节数组转换为Base64编码
     try {
-      // 直接使用String.fromCharCode和btoa
       let binary = '';
       for (let i = 0; i < clampedBytes.length; i++) {
         binary += String.fromCharCode(clampedBytes[i]);
       }
       
-      // 使用btoa转换为Base64编码
       const base64 = btoa(binary);
       console.log('Base64编码成功:', base64);
       return base64;
     } catch (error) {
       console.error('Base64编码失败:', error);
-      // 如果btoa方法失败，尝试使用替代方法
       return this.simpleBytesToBase64(clampedBytes);
     }
   }
 
-  // 简单的Base64编码方法
   simpleBytesToBase64(bytes) {
     const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     let result = '';
     let i = 0;
     
     while (i < bytes.length) {
-      // 取三个字节
       const b1 = bytes[i++] & 0xFF;
       const b2 = i < bytes.length ? bytes[i++] & 0xFF : 0;
       const b3 = i < bytes.length ? bytes[i++] & 0xFF : 0;
       
-      // 计算四个Base64字符
       const enc1 = b1 >> 2;
       const enc2 = ((b1 & 0x03) << 4) | (b2 >> 4);
       const enc3 = ((b2 & 0x0F) << 2) | (b3 >> 6);
       const enc4 = b3 & 0x3F;
       
-      // 添加到结果
       result += base64Chars[enc1];
       result += base64Chars[enc2];
       result += i > bytes.length + 1 ? '=' : base64Chars[enc3];
@@ -528,11 +490,8 @@ class BluetoothHandler {
     return result;
   }
 
-  // 将Base64编码转换为字节数组
   base64ToBytes(base64) {
-    // 使用atob将Base64编码转换为字符串
     const binary = atob(base64);
-    // 创建字节数组
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i);
