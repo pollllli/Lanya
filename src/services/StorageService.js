@@ -1,6 +1,18 @@
+/**
+ * 存储服务模块
+ * 提供统一的数据存储管理功能，包括器件、用户、BOM等数据的增删改查
+ * 支持内存缓存机制，提高读取性能
+ */
+
 import { saveData, getData, removeData, batchGetData, batchSaveData, clearAllData } from '../utils/StorageUtils';
 import { logError, handleAsyncError } from '../utils/ErrorHandler';
 
+/**
+ * CSV行解析函数
+ * 支持带引号的字段（处理字段中包含逗号的情况）
+ * @param {string} line - CSV行内容
+ * @returns {Array<string>} 解析后的字段数组
+ */
 function parseCSVLine(line) {
   const result = [];
   let current = '';
@@ -9,9 +21,11 @@ function parseCSVLine(line) {
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
     
+    // 处理引号（用于包含逗号的字段）
     if (char === '"') {
       inQuotes = !inQuotes;
     } else if (char === ',' && !inQuotes) {
+      // 遇到逗号且不在引号内，作为字段分隔符
       result.push(current);
       current = '';
     } else {
@@ -23,27 +37,57 @@ function parseCSVLine(line) {
   return result;
 }
 
+/**
+ * 存储服务类
+ * 提供统一的数据存储和缓存管理功能
+ */
 class StorageService {
+  /**
+   * 内存缓存（私有静态成员）
+   */
   static #cache = new Map();
-  static #cacheTTL = 5 * 60 * 1000; // 5分钟缓存
+  
+  /**
+   * 缓存有效期（5分钟）
+   */
+  static #cacheTTL = 5 * 60 * 1000;
+  
+  /**
+   * 缓存时间戳映射
+   */
   static #cacheTimestamps = new Map();
 
-  // 缓存管理
+  /**
+   * 从缓存获取数据
+   * @param {string} key - 缓存键名
+   * @returns {*|undefined} 缓存数据，如果过期或不存在返回undefined
+   */
   static #getFromCache(key) {
     const timestamp = this.#cacheTimestamps.get(key);
+    // 检查缓存是否有效（未过期）
     if (timestamp && Date.now() - timestamp < this.#cacheTTL) {
       return this.#cache.get(key);
     }
+    // 缓存过期，移除缓存
     this.#cache.delete(key);
     this.#cacheTimestamps.delete(key);
     return undefined;
   }
 
+  /**
+   * 设置缓存
+   * @param {string} key - 缓存键名
+   * @param {*} value - 缓存值
+   */
   static #setToCache(key, value) {
     this.#cache.set(key, value);
     this.#cacheTimestamps.set(key, Date.now());
   }
 
+  /**
+   * 清除缓存
+   * @param {string} [key] - 要清除的缓存键名，不传则清除所有缓存
+   */
   static #clearCache(key) {
     if (key) {
       this.#cache.delete(key);
@@ -54,17 +98,19 @@ class StorageService {
     }
   }
 
-  // 设备相关操作
   /**
    * 获取所有器件数据
    * @returns {Promise<Array>} 器件数据数组
    */
   static async getDevices() {
     try {
+      // 先从缓存获取
       const cached = this.#getFromCache('devices');
       if (cached) return cached;
       
+      // 从持久化存储获取
       const devices = await getData('devices', []);
+      // 更新缓存
       this.#setToCache('devices', devices);
       return devices;
     } catch (error) {
@@ -91,12 +137,16 @@ class StorageService {
   /**
    * 添加新器件
    * @param {Object} device - 器件数据
-   * @returns {Promise<Object>} 添加的器件数据
+   * @param {string} device.id - 器件编号（可选，不填则自动生成）
+   * @param {string} device.name - 器件名称（必填）
+   * @returns {Promise<Object>} 添加的器件数据（包含自动生成的ID和时间戳）
+   * @throws {Error} 如果器件编号已存在
    */
   static async addDevice(device) {
     try {
       const devices = await this.getDevices();
       
+      // 检查编号是否重复
       if (device.id) {
         const existingDevice = devices.find(d => d.id === device.id);
         if (existingDevice) {
@@ -104,6 +154,7 @@ class StorageService {
         }
       }
       
+      // 创建新器件（自动生成ID和时间戳）
       const newDevice = {
         ...device,
         id: device.id || (devices.length > 0 ? Math.max(...devices.map(d => d.id)) + 1 : 1),
@@ -122,8 +173,8 @@ class StorageService {
 
   /**
    * 更新器件数据
-   * @param {Object} updatedDevice - 更新后的器件数据
-   * @returns {Promise<Object|null>} 更新后的器件数据
+   * @param {Object} updatedDevice - 更新后的器件数据（必须包含id）
+   * @returns {Promise<Object|null>} 更新后的器件数据，未找到返回null
    */
   static async updateDevice(updatedDevice) {
     try {
@@ -165,7 +216,7 @@ class StorageService {
   /**
    * 根据ID获取器件
    * @param {number} deviceId - 器件ID
-   * @returns {Promise<Object|null>} 器件数据
+   * @returns {Promise<Object|null>} 器件数据，未找到返回null
    */
   static async getDeviceById(deviceId) {
     try {
@@ -177,7 +228,6 @@ class StorageService {
     }
   }
 
-  // 用户相关操作
   /**
    * 获取所有用户数据
    * @returns {Promise<Array>} 用户数据数组
@@ -192,7 +242,7 @@ class StorageService {
         this.#setToCache('users', users);
         return users;
       } else {
-        // 默认用户
+        // 如果没有用户数据，创建默认用户
         const defaultUsers = [
           { username: 'admin', password: 'admin', isAdmin: true, createdAt: new Date().toISOString() },
           { username: 'user', password: 'user', isAdmin: false, createdAt: new Date().toISOString() }
@@ -224,7 +274,7 @@ class StorageService {
   /**
    * 根据用户名获取用户
    * @param {string} username - 用户名
-   * @returns {Promise<Object|null>} 用户数据
+   * @returns {Promise<Object|null>} 用户数据，未找到返回null
    */
   static async getUserByUsername(username) {
     try {
@@ -236,10 +286,9 @@ class StorageService {
     }
   }
 
-  // 搜索历史相关操作
   /**
    * 获取搜索历史
-   * @param {number} limit - 限制数量
+   * @param {number} [limit=10] - 限制数量
    * @returns {Promise<Array>} 搜索历史数组
    */
   static async getSearchHistory(limit = 10) {
@@ -264,6 +313,7 @@ class StorageService {
    */
   static async addSearchHistory(keyword) {
     try {
+      // 验证关键词
       if (!keyword || typeof keyword !== 'string' || !keyword.trim()) {
         return;
       }
@@ -273,7 +323,7 @@ class StorageService {
       
       // 移除重复项
       const filteredHistory = history.filter(item => item !== trimmedKeyword);
-      // 添加到开头
+      // 添加到开头，保持最新的在前面
       const newHistory = [trimmedKeyword, ...filteredHistory].slice(0, 10);
       
       await this.saveSearchHistory(newHistory);
@@ -311,7 +361,6 @@ class StorageService {
     }
   }
 
-  // 表单状态相关操作
   /**
    * 获取表单状态
    * @returns {Promise<Object>} 表单状态对象
@@ -345,10 +394,9 @@ class StorageService {
     }
   }
 
-  // 批量操作
   /**
    * 批量获取数据
-   * @param {Array} keys - 存储键名数组
+   * @param {Array<string>} keys - 存储键名数组
    * @returns {Promise<Object>} 键值对对象
    */
   static async batchGet(keys) {
@@ -417,7 +465,6 @@ class StorageService {
     }
   }
 
-  // 登录用户相关操作
   /**
    * 保存登录用户信息
    * @param {Object} user - 用户信息
@@ -435,7 +482,7 @@ class StorageService {
 
   /**
    * 获取登录用户信息
-   * @returns {Promise<Object|null>} 用户信息
+   * @returns {Promise<Object|null>} 用户信息，未登录返回null
    */
   static async getLoggedInUser() {
     try {
@@ -452,7 +499,7 @@ class StorageService {
   }
 
   /**
-   * 移除登录用户信息
+   * 移除登录用户信息（登出）
    * @returns {Promise<void>}
    */
   static async removeLoggedInUser() {
@@ -465,7 +512,6 @@ class StorageService {
     }
   }
 
-  // BOM相关操作
   /**
    * 获取所有BOM数据
    * @returns {Promise<Array>} BOM数据数组
@@ -502,7 +548,7 @@ class StorageService {
   /**
    * 添加新BOM
    * @param {Object} bom - BOM数据
-   * @returns {Promise<Object>} 添加的BOM数据
+   * @returns {Promise<Object>} 添加的BOM数据（包含自动生成的ID和时间戳）
    */
   static async addBOM(bom) {
     try {
@@ -524,7 +570,7 @@ class StorageService {
 
   /**
    * 更新BOM数据
-   * @param {Object} updatedBOM - 更新后的BOM数据
+   * @param {Object} updatedBOM - 更新后的BOM数据（必须包含id）
    * @returns {Promise<boolean>} 是否更新成功
    */
   static async updateBOM(updatedBOM) {
@@ -566,7 +612,7 @@ class StorageService {
   /**
    * 根据ID获取BOM
    * @param {number} bomId - BOM ID
-   * @returns {Promise<Object|null>} BOM数据
+   * @returns {Promise<Object|null>} BOM数据，未找到返回null
    */
   static async getBOMById(bomId) {
     try {
@@ -578,7 +624,10 @@ class StorageService {
     }
   }
 
-  // 数据备份和恢复
+  /**
+   * 导出所有数据
+   * @returns {Promise<Object>} 包含所有数据的备份对象
+   */
   static async exportAllData() {
     try {
       const keys = ['devices', 'users', 'boms', 'searchHistory', 'formState'];
@@ -595,6 +644,14 @@ class StorageService {
     }
   }
 
+  /**
+   * 导入备份数据
+   * @param {Object} backupData - 备份数据对象
+   * @param {Object} backupData.data - 要导入的数据
+   * @param {string} [backupData.version] - 备份版本
+   * @returns {Promise<boolean>} 是否导入成功
+   * @throws {Error} 如果备份数据无效或版本不兼容
+   */
   static async importAllData(backupData) {
     try {
       if (!backupData || !backupData.data) {
@@ -616,14 +673,22 @@ class StorageService {
     }
   }
 
-  // 批量导入器件数据
+  /**
+   * 从CSV文件批量导入器件数据
+   * @param {string} csvContent - CSV文件内容
+   * @returns {Promise<Object>} 导入结果
+   * @returns {boolean} success - 是否成功
+   * @returns {number} imported - 成功导入数量
+   * @returns {Array<string>} errors - 错误信息列表
+   * @returns {number} total - 总行数
+   */
   static async importDevicesFromCSV(csvContent) {
     try {
       const devices = await this.getDevices();
       const newDevices = [];
       const errors = [];
       
-      // 中文列名映射
+      // 中文列名映射（支持多种列名）
       const columnMapping = {
         '器件名称': 'name',
         '名称': 'name',
@@ -645,16 +710,19 @@ class StorageService {
       const lines = csvContent.split('\n');
       const headers = parseCSVLine(lines[0]).map(header => header.trim());
       
+      // 逐行解析
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (!line) continue;
+        if (!line) continue;  // 跳过空行
         
         const values = parseCSVLine(line);
         const device = {};
         
+        // 映射列名到字段
         headers.forEach((header, index) => {
           let mappedField = header.toLowerCase();
           
+          // 查找中文列名映射
           for (const [chineseName, englishName] of Object.entries(columnMapping)) {
             if (header.includes(chineseName) || header.toLowerCase() === chineseName.toLowerCase()) {
               mappedField = englishName;
@@ -665,7 +733,7 @@ class StorageService {
           device[mappedField] = (values[index] || '').trim();
         });
         
-        // 验证必要字段
+        // 验证必要字段（器件名称）
         if (!device.name && !device['器件名称']) {
           errors.push(`第 ${i+1} 行: 器件名称不能为空`);
           continue;
@@ -681,14 +749,9 @@ class StorageService {
           device.id = device.supplierId;
         }
         
-        // 如果没有设置supplierId，但有id，将id也赋值给supplierId（用于显示）
+        // 如果没有设置supplierId，但有id，将id也赋值给supplierId
         if (!device.supplierId && device.id) {
           device.supplierId = device.id;
-        }
-        
-        // 如果指定了编号，检查是否为数字
-        if (device.id && isNaN(parseInt(device.id))) {
-          // 如果不是数字，作为字符串ID使用
         }
         
         // 自动根据"值"字段填入对应的电气参数字段
@@ -712,7 +775,7 @@ class StorageService {
           }
         }
         
-        // 处理其他字段
+        // 处理字段名兼容性（shelfid -> shelfId）
         if (device.shelfid) device.shelfId = device.shelfid;
         
         // 移除不需要的字段
@@ -721,7 +784,7 @@ class StorageService {
         newDevices.push(device);
       }
       
-      // 添加新器件
+      // 批量添加新器件
       for (const device of newDevices) {
         await this.addDevice(device);
       }
@@ -733,11 +796,10 @@ class StorageService {
     }
   }
 
-  // 搜索和过滤
   /**
    * 搜索器件
    * @param {string} keyword - 搜索关键词
-   * @returns {Promise<Array>} 搜索结果
+   * @returns {Promise<Array>} 搜索结果数组
    */
   static async searchDevices(keyword) {
     try {
@@ -746,6 +808,7 @@ class StorageService {
       
       if (!searchTerm) return devices;
       
+      // 多字段模糊搜索
       return devices.filter(device => {
         return (
           (device.name && device.name.toLowerCase().includes(searchTerm)) ||
@@ -766,8 +829,8 @@ class StorageService {
 
   /**
    * 过滤器件
-   * @param {Object} filters - 过滤条件
-   * @returns {Promise<Array>} 过滤结果
+   * @param {Object} filters - 过滤条件对象
+   * @returns {Promise<Array>} 过滤结果数组
    */
   static async filterDevices(filters) {
     try {
@@ -775,11 +838,13 @@ class StorageService {
       
       return devices.filter(device => {
         for (const [key, value] of Object.entries(filters)) {
+          // 跳过空值条件
           if (value === null || value === undefined || value === '') continue;
           
           const deviceValue = device[key];
           if (!deviceValue) return false;
           
+          // 字符串模糊匹配，数字精确匹配
           if (typeof value === 'string') {
             if (!deviceValue.toString().toLowerCase().includes(value.toLowerCase())) {
               return false;
