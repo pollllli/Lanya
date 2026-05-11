@@ -804,6 +804,7 @@ class StorageService {
   static async searchDevices(keyword) {
     try {
       const devices = await this.getDevices();
+      if (!keyword) return devices;
       const searchTerm = keyword.toLowerCase().trim();
       
       if (!searchTerm) return devices;

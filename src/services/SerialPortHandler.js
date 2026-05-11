@@ -10,17 +10,17 @@ import CommandBuilder from './CommandBuilder';
  * 默认配置常量
  */
 const DEFAULT_CONFIG = {
-  PORT_PATH: '/dev/ttyUSB0',      // 默认串口路径（Linux）
-  BAUD_RATE: 9600,                 // 默认波特率
-  DATA_BITS: 8,                    // 数据位（通常为8位）
-  STOP_BITS: 1,                    // 停止位（通常为1位）
-  PARITY: 0,                       // 校验位（0=无校验，1=奇校验，2=偶校验）
-  MAX_RECONNECT_ATTEMPTS: 5,       // 最大重连次数
-  RECONNECT_DELAY: 3000,           // 重连延迟（毫秒）
-  HEARTBEAT_INTERVAL: 10000,       // 心跳间隔（毫秒）
-  DATA_RECEIVE_INTERVAL: 5000,     // 模拟数据接收间隔（毫秒）
-  BATCH_COMMAND_DELAY: 100,        // 批量命令发送间隔（毫秒）
-  MAX_BATCH_SIZE: 50               // 最大批量命令数量
+  PORT_PATH: '/dev/ttyUSB0', // 默认串口路径（Linux）
+  BAUD_RATE: 9600, // 默认波特率
+  DATA_BITS: 8, // 数据位（通常为8位）
+  STOP_BITS: 1, // 停止位（通常为1位）
+  PARITY: 0, // 校验位（0=无校验，1=奇校验，2=偶校验）
+  MAX_RECONNECT_ATTEMPTS: 5, // 最大重连次数
+  RECONNECT_DELAY: 3000, // 重连延迟（毫秒）
+  HEARTBEAT_INTERVAL: 10000, // 心跳间隔（毫秒）
+  DATA_RECEIVE_INTERVAL: 5000, // 模拟数据接收间隔（毫秒）
+  BATCH_COMMAND_DELAY: 100, // 批量命令发送间隔（毫秒）
+  MAX_BATCH_SIZE: 50, // 最大批量命令数量
 };
 
 /**
@@ -30,17 +30,17 @@ const MOCK_PORTS = [
   { id: '/dev/ttyUSB0', name: 'USB Serial Port 0' },
   { id: '/dev/ttyUSB1', name: 'USB Serial Port 1' },
   { id: '/dev/ttyS0', name: 'Serial Port 0' },
-  { id: '/dev/ttyS1', name: 'Serial Port 1' }
+  { id: '/dev/ttyS1', name: 'Serial Port 1' },
 ];
 
 /**
  * 日志级别枚举
  */
 const LOG_LEVELS = {
-  DEBUG: 0,   // 调试信息（最详细）
-  INFO: 1,    // 一般信息
-  WARN: 2,    // 警告信息
-  ERROR: 3    // 错误信息（最精简）
+  DEBUG: 0, // 调试信息（最详细）
+  INFO: 1, // 一般信息
+  WARN: 2, // 警告信息
+  ERROR: 3, // 错误信息（最精简）
 };
 
 /**
@@ -52,31 +52,36 @@ class SerialPortHandler {
    * 构造函数
    */
   constructor() {
-    this.commandBuilder = new CommandBuilder();  // 命令帧构建器实例
-    this.serialPort = null;                      // 串口对象（真实串口库使用）
-    this.portPath = DEFAULT_CONFIG.PORT_PATH;    // 当前串口路径
-    this.baudRate = DEFAULT_CONFIG.BAUD_RATE;    // 当前波特率
-    this.dataBits = DEFAULT_CONFIG.DATA_BITS;    // 当前数据位
-    this.stopBits = DEFAULT_CONFIG.STOP_BITS;    // 当前停止位
-    this.parity = DEFAULT_CONFIG.PARITY;         // 当前校验位
-    this.isConnected = false;                    // 连接状态
-    this.autoReconnectEnabled = true;            // 是否启用自动重连
-    this.reconnectAttempts = 0;                  // 当前重连次数
+    this.commandBuilder = new CommandBuilder(); // 命令帧构建器实例
+    this.serialPort = null; // 串口对象（真实串口库使用）
+    this.portPath = DEFAULT_CONFIG.PORT_PATH; // 当前串口路径
+    this.baudRate = DEFAULT_CONFIG.BAUD_RATE; // 当前波特率
+    this.dataBits = DEFAULT_CONFIG.DATA_BITS; // 当前数据位
+    this.stopBits = DEFAULT_CONFIG.STOP_BITS; // 当前停止位
+    this.parity = DEFAULT_CONFIG.PARITY; // 当前校验位
+    this.isConnected = false; // 连接状态
+    this.autoReconnectEnabled = true; // 是否启用自动重连
+    this.reconnectAttempts = 0; // 当前重连次数
     this.maxReconnectAttempts = DEFAULT_CONFIG.MAX_RECONNECT_ATTEMPTS;
     this.reconnectDelay = DEFAULT_CONFIG.RECONNECT_DELAY;
-    this.dataListeners = [];                     // 数据监听器列表
-    this.eventListeners = {};                    // 事件监听器映射
-    this.heartbeatInterval = null;               // 心跳定时器
-    this.dataReceiveInterval = null;             // 数据接收定时器
-    this.lastHeartbeatTime = null;               // 最后心跳时间
-    this.logLevel = LOG_LEVELS.INFO;             // 当前日志级别
-    
+    this.dataListeners = []; // 数据监听器列表
+    this.eventListeners = {}; // 事件监听器映射
+    this.heartbeatInterval = null; // 心跳定时器
+    this.dataReceiveInterval = null; // 数据接收定时器
+    this.lastHeartbeatTime = null; // 最后心跳时间
+    this.logLevel = LOG_LEVELS.INFO; // 当前日志级别
+
     // 命令构建器映射
     this.commandBuilders = {
-      lightOn: (cmd) => this.commandBuilder.buildLightOnCommand(cmd.lightId || 1),
-      lightOff: (cmd) => this.commandBuilder.buildLightOffCommand(cmd.lightId || 1),
+      lightOn: (cmd) =>
+        this.commandBuilder.buildLightOnCommand(cmd.lightId || 1),
+      lightOff: (cmd) =>
+        this.commandBuilder.buildLightOffCommand(cmd.lightId || 1),
       heartbeat: () => this.commandBuilder.buildHeartbeatCommand(),
-      controlAll: (cmd) => this.commandBuilder.buildControlAllLightsCommand(cmd.state !== undefined ? cmd.state : true)
+      controlAll: (cmd) =>
+        this.commandBuilder.buildControlAllLightsCommand(
+          cmd.state !== undefined ? cmd.state : true
+        ),
     };
   }
 
@@ -89,8 +94,13 @@ class SerialPortHandler {
   log(level, message, data = {}) {
     if (level >= this.logLevel) {
       const timestamp = new Date().toISOString();
-      const levelName = Object.keys(LOG_LEVELS).find(key => LOG_LEVELS[key] === level);
-      console[levelName.toLowerCase()](`[${timestamp}] [SerialPort] [${levelName}] ${message}`, data);
+      const levelName = Object.keys(LOG_LEVELS).find(
+        (key) => LOG_LEVELS[key] === level
+      );
+      console[levelName.toLowerCase()](
+        `[${timestamp}] [SerialPort] [${levelName}] ${message}`,
+        data
+      );
     }
   }
 
@@ -104,7 +114,9 @@ class SerialPortHandler {
       this.eventListeners[event] = [];
     }
     this.eventListeners[event].push(listener);
-    this.log(LOG_LEVELS.DEBUG, `添加事件监听器: ${event}`, { listenerCount: this.eventListeners[event].length });
+    this.log(LOG_LEVELS.DEBUG, `添加事件监听器: ${event}`, {
+      listenerCount: this.eventListeners[event].length,
+    });
   }
 
   /**
@@ -114,8 +126,12 @@ class SerialPortHandler {
    */
   off(event, listener) {
     if (this.eventListeners[event]) {
-      this.eventListeners[event] = this.eventListeners[event].filter(l => l !== listener);
-      this.log(LOG_LEVELS.DEBUG, `移除事件监听器: ${event}`, { listenerCount: this.eventListeners[event].length });
+      this.eventListeners[event] = this.eventListeners[event].filter(
+        (l) => l !== listener
+      );
+      this.log(LOG_LEVELS.DEBUG, `移除事件监听器: ${event}`, {
+        listenerCount: this.eventListeners[event].length,
+      });
     }
   }
 
@@ -126,11 +142,14 @@ class SerialPortHandler {
    */
   emit(event, data) {
     if (this.eventListeners[event]) {
-      this.eventListeners[event].forEach(listener => {
+      this.eventListeners[event].forEach((listener) => {
         try {
           listener(data);
         } catch (error) {
-          this.log(LOG_LEVELS.ERROR, '事件监听器执行失败', { event, error: error.message });
+          this.log(LOG_LEVELS.ERROR, '事件监听器执行失败', {
+            event,
+            error: error.message,
+          });
         }
       });
     }
@@ -159,43 +178,49 @@ class SerialPortHandler {
     try {
       this.log(LOG_LEVELS.INFO, '开始初始化串口', {
         portPath: this.portPath,
-        baudRate: this.baudRate
+        baudRate: this.baudRate,
       });
-      
+
       // 模拟串口初始化成功（真实场景应调用串口库打开串口）
       this.isConnected = true;
       this.reconnectAttempts = 0;
-      
+
       // 启动心跳检测和数据接收模拟
       this.startHeartbeat();
       this.startDataReceiving();
-      
+
       const result = {
         success: true,
         message: '串口初始化成功',
         port: this.portPath,
-        baudRate: this.baudRate
+        baudRate: this.baudRate,
       };
-      
+
       this.log(LOG_LEVELS.INFO, '串口初始化成功', result);
       this.emit('connected', result);
-      
+
       return result;
     } catch (error) {
       this.log(LOG_LEVELS.ERROR, '串口初始化失败', { error: error.message });
-      
+
       // 自动重连逻辑
-      if (this.autoReconnectEnabled && this.reconnectAttempts < this.maxReconnectAttempts) {
+      if (
+        this.autoReconnectEnabled &&
+        this.reconnectAttempts < this.maxReconnectAttempts
+      ) {
         this.reconnectAttempts++;
-        this.log(LOG_LEVELS.WARN, `尝试重连 ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
-        
+        this.log(
+          LOG_LEVELS.WARN,
+          `尝试重连 ${this.reconnectAttempts}/${this.maxReconnectAttempts}`
+        );
+
         setTimeout(() => {
-          this.initialize().catch(err => {
+          this.initialize().catch((err) => {
             this.log(LOG_LEVELS.ERROR, '重连失败', { error: err.message });
           });
         }, this.reconnectDelay);
       }
-      
+
       this.emit('error', { message: '串口初始化失败', error: error.message });
       throw error;
     }
@@ -206,7 +231,7 @@ class SerialPortHandler {
    */
   startHeartbeat() {
     this.clearHeartbeat();
-    
+
     this.heartbeatInterval = setInterval(async () => {
       try {
         if (this.isConnected) {
@@ -218,14 +243,16 @@ class SerialPortHandler {
         this.log(LOG_LEVELS.ERROR, '心跳发送失败', { error: error.message });
         if (this.autoReconnectEnabled) {
           this.log(LOG_LEVELS.WARN, '心跳失败，尝试重连');
-          await this.initialize().catch(err => {
+          await this.initialize().catch((err) => {
             this.log(LOG_LEVELS.ERROR, '重连失败', { error: err.message });
           });
         }
       }
     }, DEFAULT_CONFIG.HEARTBEAT_INTERVAL);
-    
-    this.log(LOG_LEVELS.DEBUG, '心跳检测已启动', { interval: DEFAULT_CONFIG.HEARTBEAT_INTERVAL });
+
+    this.log(LOG_LEVELS.DEBUG, '心跳检测已启动', {
+      interval: DEFAULT_CONFIG.HEARTBEAT_INTERVAL,
+    });
   }
 
   /**
@@ -244,24 +271,29 @@ class SerialPortHandler {
    */
   startDataReceiving() {
     this.clearDataReceiving();
-    
+
     this.dataReceiveInterval = setInterval(() => {
       if (this.isConnected) {
         // 模拟从串口接收数据
         const mockData = {
-          cmd: 0x82,  // 模拟响应命令字
-          data: [Math.floor(Math.random() * 255), Math.floor(Math.random() * 255)],
+          cmd: 0x82, // 模拟响应命令字
+          data: [
+            Math.floor(Math.random() * 255),
+            Math.floor(Math.random() * 255),
+          ],
           timestamp: new Date().toISOString(),
-          type: 'data_report'
+          type: 'data_report',
         };
-        
+
         this.log(LOG_LEVELS.DEBUG, '模拟接收数据', mockData);
         this.notifyDataListeners(mockData);
         this.emit('data', mockData);
       }
     }, DEFAULT_CONFIG.DATA_RECEIVE_INTERVAL);
-    
-    this.log(LOG_LEVELS.DEBUG, '数据接收模拟已启动', { interval: DEFAULT_CONFIG.DATA_RECEIVE_INTERVAL });
+
+    this.log(LOG_LEVELS.DEBUG, '数据接收模拟已启动', {
+      interval: DEFAULT_CONFIG.DATA_RECEIVE_INTERVAL,
+    });
   }
 
   /**
@@ -306,28 +338,35 @@ class SerialPortHandler {
         this.log(LOG_LEVELS.ERROR, error.message);
         throw error;
       }
-      
+
       // 构建命令帧
       const frame = builder(command);
-      
+
       this.log(LOG_LEVELS.INFO, '发送命令', { command, frame });
-      
+
       // 模拟响应（真实场景应通过串口发送并等待响应）
       const mockResponse = {
         cmd: 0x81,
         data: [0x01],
         success: true,
         message: '命令执行成功',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
-      
+
       this.log(LOG_LEVELS.DEBUG, '接收响应', mockResponse);
       this.emit('commandSent', { command, response: mockResponse });
-      
+
       return mockResponse;
     } catch (error) {
-      this.log(LOG_LEVELS.ERROR, '发送命令失败', { error: error.message, command });
-      this.emit('error', { message: '发送命令失败', error: error.message, command });
+      this.log(LOG_LEVELS.ERROR, '发送命令失败', {
+        error: error.message,
+        command,
+      });
+      this.emit('error', {
+        message: '发送命令失败',
+        error: error.message,
+        command,
+      });
       throw error;
     }
   }
@@ -355,15 +394,15 @@ class SerialPortHandler {
       if (commands.length > DEFAULT_CONFIG.MAX_BATCH_SIZE) {
         this.log(LOG_LEVELS.WARN, `批量命令数量超过限制，将分批处理`, {
           actualSize: commands.length,
-          maxSize: DEFAULT_CONFIG.MAX_BATCH_SIZE
+          maxSize: DEFAULT_CONFIG.MAX_BATCH_SIZE,
         });
       }
 
       this.log(LOG_LEVELS.INFO, '批量发送命令开始', { total: commands.length });
-      
+
       const results = [];
       let successCount = 0;
-      
+
       // 逐个发送命令
       for (const command of commands) {
         try {
@@ -371,23 +410,25 @@ class SerialPortHandler {
           results.push({
             command: command,
             result: result,
-            success: true
+            success: true,
           });
           successCount++;
-          
+
           // 命令间隔
-          await new Promise(resolve => setTimeout(resolve, DEFAULT_CONFIG.BATCH_COMMAND_DELAY));
+          await new Promise((resolve) =>
+            setTimeout(resolve, DEFAULT_CONFIG.BATCH_COMMAND_DELAY)
+          );
         } catch (error) {
           const errorResult = {
             command: command,
             error: error.message,
-            success: false
+            success: false,
           };
           results.push(errorResult);
           this.log(LOG_LEVELS.WARN, '批量命令执行失败', errorResult);
         }
       }
-      
+
       // 汇总结果
       const batchResult = {
         success: successCount === commands.length,
@@ -395,12 +436,12 @@ class SerialPortHandler {
         total: commands.length,
         successCount: successCount,
         failureCount: commands.length - successCount,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
-      
+
       this.log(LOG_LEVELS.INFO, '批量发送命令完成', batchResult);
       this.emit('batchCommandsCompleted', batchResult);
-      
+
       return batchResult;
     } catch (error) {
       this.log(LOG_LEVELS.ERROR, '批量发送命令失败', { error: error.message });
@@ -415,21 +456,21 @@ class SerialPortHandler {
   async disconnect() {
     try {
       this.log(LOG_LEVELS.INFO, '开始断开串口连接');
-      
+
       // 停止定时器
       this.clearHeartbeat();
       this.clearDataReceiving();
-      
+
       // 关闭串口（真实场景应调用串口库关闭方法）
       if (this.serialPort) {
         // await this.serialPort.close();
         this.serialPort = null;
       }
-      
+
       // 重置状态
       this.isConnected = false;
       this.dataListeners = [];
-      
+
       this.log(LOG_LEVELS.INFO, '串口已断开连接');
       this.emit('disconnected', { message: '串口已断开连接' });
     } catch (error) {
@@ -509,7 +550,9 @@ class SerialPortHandler {
    */
   setAutoReconnect(enabled) {
     this.autoReconnectEnabled = Boolean(enabled);
-    this.log(LOG_LEVELS.INFO, '设置自动重连', { enabled: this.autoReconnectEnabled });
+    this.log(LOG_LEVELS.INFO, '设置自动重连', {
+      enabled: this.autoReconnectEnabled,
+    });
   }
 
   /**
@@ -519,7 +562,9 @@ class SerialPortHandler {
   setLogLevel(level) {
     if (Object.values(LOG_LEVELS).includes(level)) {
       this.logLevel = level;
-      this.log(LOG_LEVELS.INFO, '设置日志级别', { level: Object.keys(LOG_LEVELS).find(key => LOG_LEVELS[key] === level) });
+      this.log(LOG_LEVELS.INFO, '设置日志级别', {
+        level: Object.keys(LOG_LEVELS).find((key) => LOG_LEVELS[key] === level),
+      });
     }
   }
 
@@ -538,9 +583,11 @@ class SerialPortHandler {
       lastHeartbeatTime: this.lastHeartbeatTime,
       reconnectAttempts: this.reconnectAttempts,
       autoReconnectEnabled: this.autoReconnectEnabled,
-      uptime: this.lastHeartbeatTime ? Math.floor((Date.now() - this.lastHeartbeatTime.getTime()) / 1000) : null
+      uptime: this.lastHeartbeatTime
+        ? Math.floor((Date.now() - this.lastHeartbeatTime.getTime()) / 1000)
+        : null,
     };
-    
+
     this.log(LOG_LEVELS.DEBUG, '获取连接状态', status);
     return status;
   }
@@ -552,9 +599,13 @@ class SerialPortHandler {
   addDataListener(listener) {
     if (typeof listener === 'function') {
       this.dataListeners.push(listener);
-      this.log(LOG_LEVELS.INFO, '添加数据监听器', { listenerCount: this.dataListeners.length });
+      this.log(LOG_LEVELS.INFO, '添加数据监听器', {
+        listenerCount: this.dataListeners.length,
+      });
     } else {
-      this.log(LOG_LEVELS.WARN, '无效的数据监听器', { listenerType: typeof listener });
+      this.log(LOG_LEVELS.WARN, '无效的数据监听器', {
+        listenerType: typeof listener,
+      });
     }
   }
 
@@ -564,9 +615,11 @@ class SerialPortHandler {
    */
   removeDataListener(listener) {
     const initialLength = this.dataListeners.length;
-    this.dataListeners = this.dataListeners.filter(l => l !== listener);
+    this.dataListeners = this.dataListeners.filter((l) => l !== listener);
     if (this.dataListeners.length < initialLength) {
-      this.log(LOG_LEVELS.INFO, '移除数据监听器', { listenerCount: this.dataListeners.length });
+      this.log(LOG_LEVELS.INFO, '移除数据监听器', {
+        listenerCount: this.dataListeners.length,
+      });
     }
   }
 
@@ -579,7 +632,10 @@ class SerialPortHandler {
       try {
         listener(data);
       } catch (error) {
-        this.log(LOG_LEVELS.ERROR, '监听器执行失败', { index, error: error.message });
+        this.log(LOG_LEVELS.ERROR, '监听器执行失败', {
+          index,
+          error: error.message,
+        });
       }
     });
   }
@@ -595,14 +651,14 @@ class SerialPortHandler {
       return {
         success: true,
         response,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     } catch (error) {
       this.log(LOG_LEVELS.ERROR, 'ping失败', { error: error.message });
       return {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }

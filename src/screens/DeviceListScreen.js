@@ -20,6 +20,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     showAdvancedSearch: false,
     advancedSearchParams: {
       name: '',
+      category: '',
       function: '',
       resistance: '',
       voltage: '',
@@ -27,6 +28,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       inductance: '',
       current: ''
     },
+    isAdvancedSearchMode: false,
     successMessage: '',
     isConnected: false,
     isLoading: false,
@@ -83,7 +85,13 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       case 'RESET_ADVANCED_SEARCH':
         return {
           ...state,
-          advancedSearchParams: initialState.advancedSearchParams
+          advancedSearchParams: initialState.advancedSearchParams,
+          isAdvancedSearchMode: false
+        };
+      case 'SET_ADVANCED_SEARCH_MODE':
+        return {
+          ...state,
+          isAdvancedSearchMode: action.payload
         };
       case 'CLEAR_SEARCH_HISTORY':
         return {
@@ -116,6 +124,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     showSuggestions,
     showAdvancedSearch,
     advancedSearchParams,
+    isAdvancedSearchMode,
     successMessage,
     isConnected,
     isLoading,
@@ -192,7 +201,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   }, [dispatch]);
 
   useEffect(() => {
-    if (searchQuery.trim() !== '') {
+    if (searchQuery && searchQuery.trim() !== '') {
       handleGenerateSearchSuggestions(searchQuery);
     } else {
       dispatch({ type: 'SET_SHOW_SUGGESTIONS', payload: false });
@@ -200,7 +209,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   }, [searchQuery, handleGenerateSearchSuggestions, dispatch]);
 
   const handleGenerateSearchSuggestions = useCallback((query) => {
-    if (!query.trim()) {
+    if (!query || !query.trim()) {
       dispatch({ type: 'SET_SEARCH_SUGGESTIONS', payload: [] });
       dispatch({ type: 'SET_SHOW_SUGGESTIONS', payload: false });
       return;
@@ -213,6 +222,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
 
   const handleSearch = useCallback((query) => {
     dispatch({ type: 'SET_SEARCH_QUERY', payload: query });
+    dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: false });
     saveSearchHistory(query);
     dispatch({ type: 'SET_SHOW_SEARCH_HISTORY', payload: false });
     dispatch({ type: 'SET_SHOW_SUGGESTIONS', payload: false });
@@ -225,32 +235,19 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       const storedDevices = await StorageService.getDevices();
       
       if (storedDevices.length > 0) {
-        // 如果存储中有数据，使用存储的数据
-        console.log('从存储加载器件数据，共', storedDevices.length, '个器件');
-        dispatch({ type: 'SET_DEVICES', payload: storedDevices });
-      } else {
-        // 如果存储中没有数据，使用默认数据
-        console.log('存储中无数据，使用默认器件数据');
-        const defaultDevices = [
-          { id: 1, name: '10Ω电阻器', function: '限流、分压', resistance: '10Ω', voltage: '5V', shelfId: '1' },
-          { id: 2, name: '10μF电容器', function: '储能、滤波', capacitance: '10μF', voltage: '16V', shelfId: '1' },
-          { id: 3, name: '10mH电感器', function: '储能、滤波', inductance: '10mH', current: '1A', shelfId: '1' },
-          { id: 4, name: '1N4007二极管', function: '单向导电', voltage: '1000V', current: '2A', shelfId: '1' },
-          { id: 5, name: '2N2222三极管', function: '放大、开关', voltage: '40V', current: '500mA', shelfId: '2' },
-          { id: 6, name: '74HC00集成电路', function: '信号处理', voltage: '3.3V', current: '100mA', shelfId: '2' },
-          { id: 7, name: '5V继电器', function: '电气控制', voltage: '5V', current: '10A', shelfId: '2' },
-          { id: 8, name: '单极开关', function: '电路控制', voltage: '250V', current: '16A', shelfId: '2' },
-          { id: 9, name: '5A保险丝', function: '过载保护', voltage: '250V', current: '5A', shelfId: '3' },
-          { id: 10, name: '10kΩ电位器', function: '调节电阻', resistance: '10kΩ', voltage: '25V', shelfId: '3' },
-          { id: 11, name: '220V/12V变压器', function: '电压转换', voltage: '220V/12V', current: '2A', shelfId: '3' },
-          { id: 12, name: '16MHz晶振', function: '时钟信号', frequency: '16MHz', voltage: '3.3V', shelfId: '3' },
-          { id: 13, name: '红色LED', function: '发光指示', voltage: '3.3V', current: '20mA', shelfId: '4' },
-          { id: 14, name: '5V蜂鸣器', function: '声音提示', voltage: '5V', current: '100mA', shelfId: '4' },
-          { id: 15, name: '温度传感器', function: '信号检测', voltage: '5V', current: '50mA', shelfId: '4' },
-        ];
-        await StorageService.saveDevices(defaultDevices);
-        dispatch({ type: 'SET_DEVICES', payload: defaultDevices });
+        // 检查是否是旧的默认数据，如果是则清除
+        const isOldDefaultData = storedDevices.length >= 10 && storedDevices[0]?.name?.includes('10Ω');
+        if (isOldDefaultData) {
+          console.log('检测到旧的默认数据，正在清除...');
+          await StorageService.saveDevices([]);
+          dispatch({ type: 'SET_DEVICES', payload: [] });
+        } else {
+          // 如果存储中有数据，使用存储的数据
+          console.log('从存储加载器件数据，共', storedDevices.length, '个器件');
+          dispatch({ type: 'SET_DEVICES', payload: storedDevices });
+        }
       }
+      // 保持器件架为空，让用户手动导入或添加器件
       // memoizedFilteredDevices会自动根据selectedShelf重新计算
     } catch (error) {
       logError('加载器件数据失败', error, 'DeviceListScreen.loadDevices');
@@ -273,6 +270,8 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       // 检查是否有蓝牙连接
       if (!isConnected || !global.deviceConnection) {
         Alert.alert('提示', '请先在连接页面连接蓝牙设备');
+        // 更新连接状态为未连接
+        dispatch({ type: 'SET_CONNECTED', payload: false });
         return;
       }
 
@@ -301,8 +300,11 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
 
   // 使用 useMemo 缓存过滤后的设备列表
   const memoizedFilteredDevices = useMemo(() => {
+    if (isAdvancedSearchMode) {
+      return filteredDevices;
+    }
     return filterDevices(devices, searchQuery, selectedShelf);
-  }, [devices, searchQuery, selectedShelf]);
+  }, [devices, searchQuery, selectedShelf, isAdvancedSearchMode, filteredDevices]);
 
   // 使用 useMemo 缓存搜索建议
   const memoizedSearchSuggestions = useMemo(() => {
@@ -313,6 +315,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   const handleControlAllLightsOn = useCallback(async () => {
     if (!isConnected || !global.deviceConnection) {
       Alert.alert('提示', '请先在连接页面连接蓝牙设备');
+      dispatch({ type: 'SET_CONNECTED', payload: false });
       return;
     }
 
@@ -339,6 +342,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   const handleControlAllLightsOff = useCallback(async () => {
     if (!isConnected || !global.deviceConnection) {
       Alert.alert('提示', '请先在连接页面连接蓝牙设备');
+      dispatch({ type: 'SET_CONNECTED', payload: false });
       return;
     }
 
@@ -438,11 +442,15 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     const filtered = devices.filter(device => {
       let match = true;
       
+      if (advancedSearchParams.category && advancedSearchParams.category.trim() !== '') {
+        const categoryQuery = advancedSearchParams.category.toLowerCase();
+        match = match && device.category && device.category.toLowerCase().includes(categoryQuery);
+      }
       if (advancedSearchParams.name) {
-        match = match && device.name.toLowerCase().includes(advancedSearchParams.name.toLowerCase());
+        match = match && device.name && device.name.toLowerCase().includes(advancedSearchParams.name.toLowerCase());
       }
       if (advancedSearchParams.function) {
-        match = match && device.function.toLowerCase().includes(advancedSearchParams.function.toLowerCase());
+        match = match && device.function && device.function.toLowerCase().includes(advancedSearchParams.function.toLowerCase());
       }
       if (advancedSearchParams.resistance) {
         match = match && device.resistance && device.resistance.toLowerCase().includes(advancedSearchParams.resistance.toLowerCase());
@@ -464,6 +472,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     });
     
     dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
+    dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: true });
     dispatch({ type: 'SET_SHOW_ADVANCED_SEARCH', payload: false });
   }, [devices, advancedSearchParams, dispatch]);
 
@@ -557,6 +566,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     } else {
       dispatch({ type: 'SET_SELECTED_SHELF', payload: shelfId });
     }
+    dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: false });
     dispatch({ type: 'SET_SHOW_SHELF_DROPDOWN', payload: false });
     // 不再需要手动更新filteredDevices，memoizedFilteredDevices会自动根据selectedShelf重新计算
   }, [selectedShelf, dispatch]);
@@ -628,7 +638,10 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
           />
           <TouchableOpacity 
             style={styles.advancedSearchButton}
-            onPress={() => dispatch({ type: 'SET_SHOW_ADVANCED_SEARCH', payload: true })}
+            onPress={() => {
+              resetAdvancedSearch();
+              dispatch({ type: 'SET_SHOW_ADVANCED_SEARCH', payload: true });
+            }}
           >
             <Text style={styles.advancedSearchButtonText}>高级</Text>
           </TouchableOpacity>
@@ -765,6 +778,16 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
             
             <ScrollView style={styles.advancedSearchScroll}>
               <View style={styles.advancedSearchInputContainer}>
+                <Text style={styles.advancedSearchLabel}>器件分类</Text>
+                <TextInput
+                  style={styles.advancedSearchInput}
+                  value={advancedSearchParams.category}
+                  onChangeText={(text) => dispatch({ type: 'SET_ADVANCED_SEARCH_PARAMS', payload: {...advancedSearchParams, category: text} })}
+                  placeholder="输入器件分类（如：电阻器、传感器）"
+                />
+              </View>
+              
+              <View style={styles.advancedSearchInputContainer}>
                 <Text style={styles.advancedSearchLabel}>器件名称</Text>
                 <TextInput
                   style={styles.advancedSearchInput}
@@ -840,6 +863,8 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
                 style={[styles.modalButton, styles.modalCancelButton]}
                 onPress={() => {
                   resetAdvancedSearch();
+                  dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: false });
+                  dispatch({ type: 'SET_FILTERED_DEVICES', payload: devices });
                   dispatch({ type: 'SET_SHOW_ADVANCED_SEARCH', payload: false });
                 }}
               >

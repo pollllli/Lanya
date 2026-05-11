@@ -13,15 +13,15 @@ export default [
         ecmaVersion: 2020,
         sourceType: 'module',
         ecmaFeatures: {
-          jsx: true
-        }
-      }
+          jsx: true,
+        },
+      },
     },
     plugins: {
       '@typescript-eslint': typescriptPlugin,
       react,
       'react-native': reactNative,
-      prettier
+      prettier,
     },
     rules: {
       'prettier/prettier': 'error',
@@ -31,12 +31,12 @@ export default [
       'react-native/no-inline-styles': 'warn',
       'react-native/no-color-literals': 'warn',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-explicit-any': 'warn'
+      '@typescript-eslint/no-explicit-any': 'warn',
     },
     settings: {
       react: {
-        version: 'detect'
-      }
-    }
-  }
+        version: 'detect',
+      },
+    },
+  },
 ];

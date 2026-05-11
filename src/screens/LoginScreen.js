@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import StorageService from '../services/StorageService';
 
 const LoginScreen = ({ navigation }) => {
@@ -13,14 +22,16 @@ const LoginScreen = ({ navigation }) => {
   const handleLogin = async () => {
     try {
       const users = await StorageService.getUsers();
-      
-      const user = users.find(u => u.username === username && u.password === password);
-      
+
+      const user = users.find(
+        (u) => u.username === username && u.password === password
+      );
+
       if (user) {
         await StorageService.saveLoggedInUser(user);
         navigation.navigate('MainTabs', {
           isAdmin: user.isAdmin || false,
-          username: user.username
+          username: user.username,
         });
       } else {
         Alert.alert('登录失败', '用户名或密码错误');
@@ -37,30 +48,30 @@ const LoginScreen = ({ navigation }) => {
         Alert.alert('注册失败', '用户名和密码不能为空');
         return;
       }
-      
+
       if (password !== confirmPassword) {
         Alert.alert('注册失败', '两次输入的密码不一致');
         return;
       }
-      
+
       const users = await StorageService.getUsers();
-      
-      if (users.some(u => u.username === username)) {
+
+      if (users.some((u) => u.username === username)) {
         Alert.alert('注册失败', '用户名已存在');
         return;
       }
-      
+
       const newUser = {
         username,
         password,
-        isAdmin: isAdmin
+        isAdmin: isAdmin,
       };
-      
+
       users.push(newUser);
       await StorageService.saveUsers(users);
-      
+
       Alert.alert('注册成功', '请使用新账号登录', [
-        { text: '确定', onPress: () => setIsRegistering(false) }
+        { text: '确定', onPress: () => setIsRegistering(false) },
       ]);
     } catch (error) {
       console.error('注册失败:', error);
@@ -69,14 +80,16 @@ const LoginScreen = ({ navigation }) => {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
+    <KeyboardAvoidingView
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.content}>
         <Text style={styles.title}>器件管理系统</Text>
-        <Text style={styles.subtitle}>{isRegistering ? '注册账号' : '请登录'}</Text>
-        
+        <Text style={styles.subtitle}>
+          {isRegistering ? '注册账号' : '请登录'}
+        </Text>
+
         <View style={styles.inputContainer}>
           <Text style={styles.inputLabel}>用户名</Text>
           <TextInput
@@ -87,7 +100,7 @@ const LoginScreen = ({ navigation }) => {
             autoCapitalize="none"
           />
         </View>
-        
+
         <View style={styles.inputContainer}>
           <Text style={styles.inputLabel}>密码</Text>
           <View style={styles.passwordInputContainer}>
@@ -99,15 +112,17 @@ const LoginScreen = ({ navigation }) => {
               secureTextEntry={!showPassword}
               autoCapitalize="none"
             />
-            <TouchableOpacity 
-              style={styles.eyeIcon} 
+            <TouchableOpacity
+              style={styles.eyeIcon}
               onPress={() => setShowPassword(!showPassword)}
             >
-              <Text style={styles.eyeIconText}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+              <Text style={styles.eyeIconText}>
+                {showPassword ? '👁️' : '👁️‍🗨️'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
-        
+
         {isRegistering && (
           <>
             <View style={styles.inputContainer}>
@@ -121,45 +136,69 @@ const LoginScreen = ({ navigation }) => {
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                 />
-                <TouchableOpacity 
-                  style={styles.eyeIcon} 
+                <TouchableOpacity
+                  style={styles.eyeIcon}
                   onPress={() => setShowPassword(!showPassword)}
                 >
-                  <Text style={styles.eyeIconText}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+                  <Text style={styles.eyeIconText}>
+                    {showPassword ? '👁️' : '👁️‍🗨️'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
-            
+
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>用户角色</Text>
               <View style={styles.roleContainer}>
-                <TouchableOpacity 
-                  style={[styles.roleButton, !isAdmin && styles.roleButtonActive]}
+                <TouchableOpacity
+                  style={[
+                    styles.roleButton,
+                    !isAdmin && styles.roleButtonActive,
+                  ]}
                   onPress={() => setIsAdmin(false)}
                 >
-                  <Text style={[styles.roleButtonText, !isAdmin && styles.roleButtonTextActive]}>普通用户</Text>
+                  <Text
+                    style={[
+                      styles.roleButtonText,
+                      !isAdmin && styles.roleButtonTextActive,
+                    ]}
+                  >
+                    普通用户
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.roleButton, isAdmin && styles.roleButtonActive]}
+                <TouchableOpacity
+                  style={[
+                    styles.roleButton,
+                    isAdmin && styles.roleButtonActive,
+                  ]}
                   onPress={() => setIsAdmin(true)}
                 >
-                  <Text style={[styles.roleButtonText, isAdmin && styles.roleButtonTextActive]}>管理员</Text>
+                  <Text
+                    style={[
+                      styles.roleButtonText,
+                      isAdmin && styles.roleButtonTextActive,
+                    ]}
+                  >
+                    管理员
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
           </>
         )}
-        
+
         <View style={styles.buttonContainer}>
-          <TouchableOpacity 
-            style={styles.loginButton} 
+          <TouchableOpacity
+            style={styles.loginButton}
             onPress={isRegistering ? handleRegister : handleLogin}
           >
-            <Text style={styles.loginButtonText}>{isRegistering ? '注册' : '登录'}</Text>
+            <Text style={styles.loginButtonText}>
+              {isRegistering ? '注册' : '登录'}
+            </Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.registerButton} 
+
+          <TouchableOpacity
+            style={styles.registerButton}
             onPress={() => setIsRegistering(!isRegistering)}
           >
             <Text style={styles.registerButtonText}>
@@ -167,7 +206,7 @@ const LoginScreen = ({ navigation }) => {
             </Text>
           </TouchableOpacity>
         </View>
-        
+
         {!isRegistering && (
           <View style={styles.demoContainer}>
             <Text style={styles.demoTitle}>演示账号</Text>

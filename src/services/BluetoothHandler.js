@@ -224,6 +224,9 @@ class BluetoothHandler {
       this.connectedDevice = device;
       console.log('设备保存成功');
       
+      // 添加设备断开监听器
+      this.setupDisconnectionListener(device);
+      
       // 详细发现服务和特征并更新UUID
       await this.discoverServicesAndCharacteristics(device);
       
@@ -540,6 +543,36 @@ class BluetoothHandler {
   /**
    * 断开与蓝牙设备的连接
    */
+  /**
+   * 设置设备断开监听器
+   * 监听蓝牙设备物理断开事件（如拔掉模块）
+   * @param {Object} device - 蓝牙设备对象
+   */
+  setupDisconnectionListener(device) {
+    if (Platform.OS === 'web') {
+      return;
+    }
+    
+    // 监听设备断开事件
+    device.onDisconnected((error, disconnectedDevice) => {
+      console.log('=== 检测到蓝牙设备断开 ===');
+      console.log('断开的设备:', disconnectedDevice?.name);
+      console.log('错误信息:', error);
+      
+      // 清除连接状态
+      this.connectedDevice = null;
+      
+      // 清除全局连接状态
+      if (global.deviceConnection && global.deviceConnection.handler === this) {
+        delete global.deviceConnection;
+        console.log('全局连接状态已清除（设备物理断开）');
+      }
+    });
+  }
+
+  /**
+   * 断开与蓝牙设备的连接
+   */
   async disconnect() {
     try {
       // Web平台不支持蓝牙功能
@@ -555,9 +588,18 @@ class BluetoothHandler {
         console.log('设备断开连接成功');
       }
       this.connectedDevice = null;
+      // 清除全局连接状态，确保其他页面能正确检测到断开状态
+      if (global.deviceConnection && global.deviceConnection.handler === this) {
+        delete global.deviceConnection;
+        console.log('全局连接状态已清除');
+      }
     } catch (error) {
       console.error('断开连接失败:', error);
       this.connectedDevice = null;
+      // 清除全局连接状态
+      if (global.deviceConnection && global.deviceConnection.handler === this) {
+        delete global.deviceConnection;
+      }
     }
   }
 

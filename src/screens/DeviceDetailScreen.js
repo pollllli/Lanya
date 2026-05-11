@@ -11,7 +11,7 @@ const DeviceDetailScreen = ({ navigation, route }) => {
   const getHardwarePosition = useMemo(async () => {
     try {
       const devices = await StorageService.getDevices();
-      const index = devices.findIndex(d => d.id === device.id);
+      const index = devices.findIndex((d) => d.id === device.id);
       const position = index >= 0 ? index + 1 : 1;
       setHardwarePosition(position);
       return position;
@@ -31,28 +31,32 @@ const DeviceDetailScreen = ({ navigation, route }) => {
     try {
       const { handler } = global.deviceConnection;
       const position = await getHardwarePosition;
-      
+
       const response = await handler.sendCommand({
         type: 'lightOn',
-        lightId: position
+        lightId: position,
       });
-      
+
       const commandBuilder = new CommandBuilder();
       const commandFrame = commandBuilder.buildLightOnCommand(position);
-      const commandFrameHex = commandFrame.map(byte => byte.toString(16).padStart(2, '0')).join(' ');
-      
+      const commandFrameHex = commandFrame
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join(' ');
+
       let responseFrame = [];
       if (response && response.cmd) {
-        responseFrame = [0x55, 0xAA, response.cmd, 0x02, 0x00, 0x01];
+        responseFrame = [0x55, 0xaa, response.cmd, 0x02, 0x00, 0x01];
         const responseCrc = commandBuilder.calculateCRC8(responseFrame);
         responseFrame.push(responseCrc);
       } else if (response && response.success) {
-        responseFrame = [0x55, 0xAA, 0x81, 0x02, 0x00, 0x01];
+        responseFrame = [0x55, 0xaa, 0x81, 0x02, 0x00, 0x01];
         const responseCrc = commandBuilder.calculateCRC8(responseFrame);
         responseFrame.push(responseCrc);
       }
-      const responseFrameHex = responseFrame.map(byte => byte.toString(16).padStart(2, '0')).join(' ');
-      
+      const responseFrameHex = responseFrame
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join(' ');
+
       Alert.alert(
         '指令发送成功',
         `已向下位机发送指令，请求编号为 ${device.supplierId || device.id} 的器件\n对应位置灯已亮起\n位置: ${position}\n\n发送帧: ${commandFrameHex}\n\n响应帧: ${responseFrameHex}`,
@@ -76,28 +80,32 @@ const DeviceDetailScreen = ({ navigation, route }) => {
     try {
       const { handler } = global.deviceConnection;
       const position = await getHardwarePosition;
-      
+
       const response = await handler.sendCommand({
         type: 'lightOff',
-        lightId: position
+        lightId: position,
       });
-      
+
       const commandBuilder = new CommandBuilder();
       const commandFrame = commandBuilder.buildLightOffCommand(position);
-      const commandFrameHex = commandFrame.map(byte => byte.toString(16).padStart(2, '0')).join(' ');
-      
+      const commandFrameHex = commandFrame
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join(' ');
+
       let responseFrame = [];
       if (response && response.cmd) {
-        responseFrame = [0x55, 0xAA, response.cmd, 0x02, 0x00, 0x01];
+        responseFrame = [0x55, 0xaa, response.cmd, 0x02, 0x00, 0x01];
         const responseCrc = commandBuilder.calculateCRC8(responseFrame);
         responseFrame.push(responseCrc);
       } else if (response && response.success) {
-        responseFrame = [0x55, 0xAA, 0x82, 0x02, 0x00, 0x01];
+        responseFrame = [0x55, 0xaa, 0x82, 0x02, 0x00, 0x01];
         const responseCrc = commandBuilder.calculateCRC8(responseFrame);
         responseFrame.push(responseCrc);
       }
-      const responseFrameHex = responseFrame.map(byte => byte.toString(16).padStart(2, '0')).join(' ');
-      
+      const responseFrameHex = responseFrame
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join(' ');
+
       Alert.alert(
         '指令发送成功',
         `已向下位机发送指令，取出编号为 ${device.supplierId || device.id} 的器件\n对应位置灯已熄灭\n位置: ${position}\n\n发送帧: ${commandFrameHex}\n\n响应帧: ${responseFrameHex}`,
@@ -115,11 +123,13 @@ const DeviceDetailScreen = ({ navigation, route }) => {
     <View style={styles.container}>
       <View style={styles.deviceCard}>
         <View style={styles.deviceIdContainer}>
-          <Text style={styles.deviceId}>编号: {device.supplierId || device.id}</Text>
+          <Text style={styles.deviceId}>
+            编号: {device.supplierId || device.id}
+          </Text>
         </View>
         <Text style={styles.deviceName}>{device.name}</Text>
         <Text style={styles.deviceFunction}>{device.function}</Text>
-        
+
         <View style={styles.specContainer}>
           {device.resistance && (
             <View style={styles.specItem}>
@@ -154,7 +164,7 @@ const DeviceDetailScreen = ({ navigation, route }) => {
         </View>
 
         <View style={styles.buttonContainer}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.sendButton, isSending && styles.sendButtonDisabled]}
             onPress={handleSendCommand}
             disabled={isSending}
@@ -163,9 +173,12 @@ const DeviceDetailScreen = ({ navigation, route }) => {
               {isSending ? '发送中...' : '请求此器件'}
             </Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.takeOutButton, isSending && styles.sendButtonDisabled]}
+
+          <TouchableOpacity
+            style={[
+              styles.takeOutButton,
+              isSending && styles.sendButtonDisabled,
+            ]}
             onPress={handleTakeOutDevice}
             disabled={isSending}
           >
@@ -174,17 +187,19 @@ const DeviceDetailScreen = ({ navigation, route }) => {
             </Text>
           </TouchableOpacity>
         </View>
-        
+
         {isAdmin && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.editButton}
-            onPress={() => navigation.navigate('AdminEdit', {
-              device: device,
-              isNew: false,
-              onSave: () => {
-                navigation.goBack();
-              },
-            })}
+            onPress={() =>
+              navigation.navigate('AdminEdit', {
+                device: device,
+                isNew: false,
+                onSave: () => {
+                  navigation.goBack();
+                },
+              })
+            }
           >
             <Text style={styles.editButtonText}>编辑器件</Text>
           </TouchableOpacity>

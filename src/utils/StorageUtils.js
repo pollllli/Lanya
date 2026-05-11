@@ -84,7 +84,7 @@ export const batchSaveData = async (keyValuePairs) => {
   try {
     const pairs = Object.entries(keyValuePairs).map(([key, value]) => [
       key,
-      JSON.stringify(value)
+      JSON.stringify(value),
     ]);
     await AsyncStorage.multiSet(pairs);
   } catch (error) {

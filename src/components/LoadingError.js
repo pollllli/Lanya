@@ -2,7 +2,13 @@
 // 用于显示加载状态和错误信息，可在多个屏幕中重用
 
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  StyleSheet,
+  TouchableOpacity,
+} from 'react-native';
 
 /**
  * 加载状态组件
@@ -26,7 +32,11 @@ export const Loading = ({ message = '加载中...', fullScreen = false }) => {
  * @param {Function} props.onRetry - 重试回调函数
  * @param {boolean} props.fullScreen - 是否全屏显示
  */
-export const ErrorMessage = ({ message = '发生错误', onRetry, fullScreen = false }) => {
+export const ErrorMessage = ({
+  message = '发生错误',
+  onRetry,
+  fullScreen = false,
+}) => {
   return (
     <View style={[styles.container, fullScreen && styles.fullScreen]}>
       <Text style={styles.errorIcon}>❌</Text>
@@ -47,7 +57,11 @@ export const ErrorMessage = ({ message = '发生错误', onRetry, fullScreen = f
  * @param {string} props.icon - 空状态图标
  * @param {boolean} props.fullScreen - 是否全屏显示
  */
-export const EmptyState = ({ message = '暂无数据', icon = '📭', fullScreen = false }) => {
+export const EmptyState = ({
+  message = '暂无数据',
+  icon = '📭',
+  fullScreen = false,
+}) => {
   return (
     <View style={[styles.container, fullScreen && styles.fullScreen]}>
       <Text style={styles.emptyIcon}>{icon}</Text>

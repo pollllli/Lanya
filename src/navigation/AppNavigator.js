@@ -28,70 +28,78 @@ const Tab = createBottomTabNavigator();
 
 // 主标签导航
 const MainTabNavigator = ({ route }) => {
-  const { isAdmin, username } = route.params || { isAdmin: false, username: 'user' };
-  
+  const { isAdmin, username } = route.params || {
+    isAdmin: false,
+    username: 'user',
+  };
+
   console.log('MainTabNavigator received:', { isAdmin, username });
-  
+
   return (
     <Tab.Navigator
-        screenOptions={{
-          tabBarActiveTintColor: '#007AFF',
-          tabBarInactiveTintColor: '#999',
-          tabBarStyle: {
-            backgroundColor: '#f5f5f5',
-            borderTopWidth: 1,
-            borderTopColor: '#ddd',
-            height: 60,
-          },
-          tabBarLabelStyle: {
-            fontSize: 14,
-          },
-          headerShown: false,
+      screenOptions={{
+        tabBarActiveTintColor: '#007AFF',
+        tabBarInactiveTintColor: '#999',
+        tabBarStyle: {
+          backgroundColor: '#f5f5f5',
+          borderTopWidth: 1,
+          borderTopColor: '#ddd',
+          height: 60,
+        },
+        tabBarLabelStyle: {
+          fontSize: 14,
+        },
+        headerShown: false,
+      }}
+    >
+      <Tab.Screen
+        name="DeviceListTab"
+        options={{
+          title: '库存',
+          tabBarTestID: 'tab-inventory',
         }}
       >
-        <Tab.Screen 
-          name="DeviceListTab" 
-          options={{ 
-            title: '库存',
-            tabBarTestID: 'tab-inventory',
-          }} 
-        >
-          {(props) => <DeviceListScreen {...props} isAdmin={isAdmin} />}
-        </Tab.Screen>
-        <Tab.Screen 
-          name="Connection" 
-          component={ConnectionScreen} 
-          options={{ 
-            title: '连接',
-            tabBarTestID: 'tab-connection',
-          }} 
-        />
-        <Tab.Screen 
-          name="BOM" 
-          options={{ 
-            title: 'BOM配单',
-            tabBarTestID: 'tab-bom',
-          }} 
-        >
-          {(props) => <BOMScreen {...props} isAdmin={isAdmin} />}
-        </Tab.Screen>
-        <Tab.Screen 
-            name="Profile" 
-            options={{ 
-              title: '我的',
-              tabBarTestID: 'tab-profile',
-            }} 
-          >
-            {(props) => <ProfileScreen {...props} route={{ 
-              ...props.route, 
-              params: { 
-                ...props.route.params, 
-                username: username || (isAdmin ? 'admin' : 'user'), 
-                isAdmin 
-              } 
-            }} />}
-          </Tab.Screen>
-      </Tab.Navigator>
+        {(props) => <DeviceListScreen {...props} isAdmin={isAdmin} />}
+      </Tab.Screen>
+      <Tab.Screen
+        name="Connection"
+        component={ConnectionScreen}
+        options={{
+          title: '连接',
+          tabBarTestID: 'tab-connection',
+        }}
+      />
+      <Tab.Screen
+        name="BOM"
+        options={{
+          title: 'BOM配单',
+          tabBarTestID: 'tab-bom',
+        }}
+      >
+        {(props) => <BOMScreen {...props} isAdmin={isAdmin} />}
+      </Tab.Screen>
+      <Tab.Screen
+        name="Profile"
+        options={{
+          title: '我的',
+          tabBarTestID: 'tab-profile',
+        }}
+      >
+        {(props) => (
+          <ProfileScreen
+            {...props}
+            route={{
+              ...props.route,
+              params: {
+                ...props.route.params,
+                username: username || (isAdmin ? 'admin' : 'user'),
+                isAdmin,
+              },
+            }}
+          />
+        )}
+      </Tab.Screen>
+    </Tab.Navigator>
   );
 };
 
@@ -137,7 +145,7 @@ const AppNavigator = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator 
+      <Stack.Navigator
         initialRouteName={initialRoute}
         screenOptions={{
           headerStyle: {
@@ -172,43 +180,46 @@ const AppNavigator = () => {
           },
         }}
       >
-        <Stack.Screen 
-          name="Login" 
-          component={LoginScreen} 
-          options={{ 
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={{
             title: '登录',
             headerShown: false,
-          }} 
+          }}
         />
-        <Stack.Screen 
-          name="MainTabs" 
-          options={{ headerShown: false }} 
-        >
+        <Stack.Screen name="MainTabs" options={{ headerShown: false }}>
           {(props) => (
-            <MainTabNavigator 
-              {...props} 
+            <MainTabNavigator
+              {...props}
               route={{
                 ...props.route,
                 params: {
                   ...props.route.params,
-                  isAdmin: props.route.params?.isAdmin || loggedInUser?.isAdmin || false,
-                  username: props.route.params?.username || loggedInUser?.username || 'user'
-                }
+                  isAdmin:
+                    props.route.params?.isAdmin ||
+                    loggedInUser?.isAdmin ||
+                    false,
+                  username:
+                    props.route.params?.username ||
+                    loggedInUser?.username ||
+                    'user',
+                },
               }}
             />
           )}
         </Stack.Screen>
-        <Stack.Screen 
-          name="DeviceDetail" 
-          component={DeviceDetailScreen} 
-          options={{ 
+        <Stack.Screen
+          name="DeviceDetail"
+          component={DeviceDetailScreen}
+          options={{
             title: '器件详情',
             headerBackTitle: '返回',
-          }} 
+          }}
         />
-        <Stack.Screen 
-          name="AdminEdit" 
-          component={AdminEditScreen} 
+        <Stack.Screen
+          name="AdminEdit"
+          component={AdminEditScreen}
           options={({ route }) => ({
             title: route.params?.isNew ? '上架器件' : '编辑器件',
             headerBackTitle: '返回',

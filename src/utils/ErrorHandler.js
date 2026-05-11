@@ -10,7 +10,7 @@
 export const logError = (message, error, context = 'Unknown') => {
   const timestamp = new Date().toISOString();
   console.error(`[${timestamp}] [${context}] ${message}`, error);
-  
+
   // 这里可以添加更复杂的日志记录逻辑，比如保存到本地存储或发送到服务器
 };
 
