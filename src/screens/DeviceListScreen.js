@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useCallback, useReducer } from 'react';
+import React, { useEffect, useMemo, useCallback, useReducer, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, TextInput, Modal, ScrollView, Animated, ActivityIndicator } from 'react-native';
 import StorageService from '../services/StorageService';
@@ -137,6 +137,17 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     loadDevices();
     loadSearchHistory();
     checkConnectionStatus();
+    
+    // 注册蓝牙断开回调
+    global.onBluetoothDisconnected = () => {
+      console.log('收到蓝牙断开通知，更新连接状态');
+      dispatch({ type: 'SET_CONNECTED', payload: false });
+    };
+    
+    // 清理回调
+    return () => {
+      delete global.onBluetoothDisconnected;
+    };
   }, []);
 
   // 当页面获得焦点时重新加载设备数据
@@ -158,13 +169,43 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     };
   }, [checkConnectionStatus]);
 
-  // 检查连接状态
-  const checkConnectionStatus = useCallback(() => {
-    const connected = !!global.deviceConnection;
-    if (connected !== isConnected) {
-      dispatch({ type: 'SET_CONNECTED', payload: connected });
+  // 保存上次连接状态，用于判断是否需要输出日志
+  const lastConnectedStatus = useRef(isConnected);
+  
+  // 检查连接状态（优先检查全局连接对象，再检测蓝牙设备真实状态）
+  const checkConnectionStatus = useCallback(async () => {
+    let connected = false;
+    let statusMessage = '';
+    
+    // 首先检查全局连接对象是否存在（蓝牙断开时会被清除）
+    if (global.deviceConnection && global.deviceConnection.handler) {
+      const handler = global.deviceConnection.handler;
+      // 检查设备对象是否存在且已连接
+      if (handler.connectedDevice) {
+        try {
+          // 直接调用设备的isConnected方法检测真实连接状态
+          const isDeviceConnected = await handler.connectedDevice.isConnected();
+          connected = isDeviceConnected;
+          statusMessage = connected ? '已连接（设备在线）' : '已断开（设备离线）';
+        } catch (error) {
+          connected = false;
+          statusMessage = '已断开（检测失败）';
+        }
+      }
+    } else {
+      // 全局连接对象已被清除，说明连接已断开
+      connected = false;
+      statusMessage = '已断开（全局连接对象已清除）';
     }
-  }, [isConnected, dispatch]);
+    
+    // 只在连接状态发生变化时输出日志
+    if (connected !== lastConnectedStatus.current) {
+      console.log('蓝牙连接状态:', statusMessage);
+      lastConnectedStatus.current = connected;
+    }
+    
+    dispatch({ type: 'SET_CONNECTED', payload: connected });
+  }, [dispatch]);
 
   const loadSearchHistory = useCallback(async () => {
     try {

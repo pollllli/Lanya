@@ -89,11 +89,16 @@ class BluetoothHandler {
     this.writeCharacteristicUUID = '0000fff1-0000-1000-8000-00805f9b34fb';
     // 读取特征UUID（默认值，实际会自动发现）
     this.readCharacteristicUUID = '0000fff2-0000-1000-8000-00805f9b34fb';
+    // 最后一次心跳时间（用于检测连接状态）
+    this.lastHeartbeatTime = 0;
+    // 心跳超时时间（毫秒），超过此时间未通信则认为断开
+    this.heartbeatTimeout = 2000; // 2秒
     
     console.log('=== 蓝牙处理器初始化 ===');
     console.log('服务UUID:', this.serviceUUID);
     console.log('写入特征UUID:', this.writeCharacteristicUUID);
     console.log('读取特征UUID:', this.readCharacteristicUUID);
+    console.log('心跳超时时间:', this.heartbeatTimeout, 'ms');
   }
 
   /**
@@ -515,6 +520,10 @@ class BluetoothHandler {
         
         console.log('发送命令成功');
         console.log('=== 发送命令完成 ===');
+        
+        // 更新心跳时间
+        this.updateHeartbeat();
+        
         return {
           cmd: frame[2] | 0x80,  // 返回响应命令字（原命令字 | 0x80）
           data: [0x01],          // 返回成功数据
@@ -544,6 +553,27 @@ class BluetoothHandler {
    * 断开与蓝牙设备的连接
    */
   /**
+   * 更新心跳时间（在发送命令时调用）
+   * 用于检测蓝牙连接状态
+   */
+  updateHeartbeat() {
+    this.lastHeartbeatTime = Date.now();
+    console.log('心跳时间已更新:', this.lastHeartbeatTime);
+  }
+
+  /**
+   * 检查心跳状态（判断是否超时）
+   * @returns {boolean} - 是否在心跳超时时间内
+   */
+  isHeartbeatAlive() {
+    const now = Date.now();
+    const elapsed = now - this.lastHeartbeatTime;
+    const isAlive = elapsed <= this.heartbeatTimeout;
+    console.log('心跳检查 - 已过去:', elapsed, 'ms, 超时时间:', this.heartbeatTimeout, 'ms, 状态:', isAlive ? '正常' : '超时');
+    return isAlive;
+  }
+
+  /**
    * 设置设备断开监听器
    * 监听蓝牙设备物理断开事件（如拔掉模块）
    * @param {Object} device - 蓝牙设备对象
@@ -566,6 +596,12 @@ class BluetoothHandler {
       if (global.deviceConnection && global.deviceConnection.handler === this) {
         delete global.deviceConnection;
         console.log('全局连接状态已清除（设备物理断开）');
+        
+        // 触发全局事件通知UI更新
+        if (typeof global.onBluetoothDisconnected === 'function') {
+          console.log('通知UI蓝牙已断开');
+          global.onBluetoothDisconnected();
+        }
       }
     });
   }

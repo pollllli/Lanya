@@ -62,12 +62,22 @@ const ConnectionScreen = ({ navigation }) => {
       checkGlobalConnectionStatus();
     }, 2000);
 
+    // 注册蓝牙断开回调
+    global.onBluetoothDisconnected = () => {
+      console.log('ConnectionScreen收到蓝牙断开通知');
+      setIsConnected(false);
+      setConnectedDevice(null);
+      setConnectionStatus('未连接');
+    };
+
     return () => {
       // 清理资源
       clearInterval(checkInterval);
       if (bluetoothHandler) {
         bluetoothHandler.disconnect();
       }
+      // 清理回调
+      delete global.onBluetoothDisconnected;
     };
   }, []);
 
