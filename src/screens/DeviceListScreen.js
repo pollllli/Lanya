@@ -110,6 +110,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
 
   const [state, dispatch] = useReducer(reducer, initialState);
   const successAnimation = useMemo(() => new Animated.Value(0), []);
+  const lastConnectedStatus = useRef(false);
   
   // 解构状态
   const {
@@ -169,9 +170,6 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     };
   }, [checkConnectionStatus]);
 
-  // 保存上次连接状态，用于判断是否需要输出日志
-  const lastConnectedStatus = useRef(isConnected);
-  
   // 检查连接状态（优先检查全局连接对象，再检测蓝牙设备真实状态）
   const checkConnectionStatus = useCallback(async () => {
     let connected = false;

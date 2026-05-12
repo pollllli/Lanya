@@ -109,7 +109,27 @@ class StorageService {
       if (cached) return cached;
       
       // 从持久化存储获取
-      const devices = await getData('devices', []);
+      let devices = await getData('devices', []);
+      
+      // 修复已存在的无效 id（NaN、字符串等）
+      const existingIds = devices.map(d => typeof d.id === 'number' && !isNaN(d.id) ? d.id : 0);
+      let maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0;
+      
+      let needsSave = false;
+      devices = devices.map(device => {
+        if (typeof device.id !== 'number' || isNaN(device.id)) {
+          maxId++;
+          needsSave = true;
+          return { ...device, id: maxId };
+        }
+        return device;
+      });
+      
+      // 如果修复了数据，保存修复后的数据
+      if (needsSave) {
+        await saveData('devices', devices);
+      }
+      
       // 更新缓存
       this.#setToCache('devices', devices);
       return devices;
@@ -146,18 +166,17 @@ class StorageService {
     try {
       const devices = await this.getDevices();
       
-      // 检查编号是否重复
-      if (device.id) {
-        const existingDevice = devices.find(d => d.id === device.id);
-        if (existingDevice) {
-          throw new Error(`器件编号 ${device.id} 已存在`);
-        }
-      }
+      // 生成有效的数字id，过滤掉NaN或无效值
+      const existingIds = devices.map(d => typeof d.id === 'number' && !isNaN(d.id) ? d.id : 0);
+      const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0;
+      const newId = (device.id && typeof device.id === 'number' && !isNaN(device.id)) 
+        ? device.id 
+        : maxId + 1;
       
       // 创建新器件（自动生成ID和时间戳）
       const newDevice = {
         ...device,
-        id: device.id || (devices.length > 0 ? Math.max(...devices.map(d => d.id)) + 1 : 1),
+        id: newId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
