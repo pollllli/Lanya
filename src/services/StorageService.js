@@ -744,11 +744,6 @@ class StorageService {
           device.name = device['器件名称'];
         }
         
-        // 如果没有指定器件编号，使用供应商编号作为器件编号
-        if (!device.id && device.supplierId) {
-          device.id = device.supplierId;
-        }
-        
         // 如果没有设置supplierId，但有id，将id也赋值给supplierId
         if (!device.supplierId && device.id) {
           device.supplierId = device.id;
