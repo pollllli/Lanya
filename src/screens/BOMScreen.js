@@ -453,6 +453,16 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       if (matchInfo.devices && matchInfo.devices.length > 0) {
         targetDevice = matchInfo.devices[0];
       }
+    } else {
+      // 如果传入了device，也要检查数量是否充足
+      const deviceQuantity = targetDevice.quantity ? parseInt(targetDevice.quantity) : 1;
+      if (deviceQuantity < component.quantity) {
+        Alert.alert(
+          '提示',
+          `器件数量不足！\n需要: ${component.quantity}\n现有: ${deviceQuantity}`
+        );
+        return;
+      }
     }
 
     if (targetDevice) {
