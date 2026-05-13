@@ -523,12 +523,33 @@ class StorageService {
    */
   static async getLoggedInUser() {
     try {
-      const cached = this.#getFromCache('loggedInUser');
-      if (cached) return cached;
+      let cached = this.#getFromCache('loggedInUser');
       
-      const user = await getData('loggedInUser', null);
-      this.#setToCache('loggedInUser', user);
-      return user;
+      if (!cached) {
+        cached = await getData('loggedInUser', null);
+      }
+      
+      if (!cached) return null;
+      
+      // 修复用户权限（确保admin是管理员，user是普通用户）
+      let needFix = false;
+      let fixedUser = cached;
+      
+      if (cached.username === 'admin' && cached.isAdmin !== true) {
+        needFix = true;
+        fixedUser = { ...cached, isAdmin: true };
+      } else if (cached.username === 'user' && cached.isAdmin !== false) {
+        needFix = true;
+        fixedUser = { ...cached, isAdmin: false };
+      }
+      
+      if (needFix) {
+        await this.saveLoggedInUser(fixedUser);
+        return fixedUser;
+      }
+      
+      this.#setToCache('loggedInUser', cached);
+      return cached;
     } catch (error) {
       logError('获取登录用户信息失败', error, 'StorageService.getLoggedInUser');
       return null;
