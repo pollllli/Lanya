@@ -10,8 +10,10 @@ import {
   Platform,
 } from 'react-native';
 import StorageService from '../services/StorageService';
+import { useUser } from '../context/UserContext';
 
 const LoginScreen = ({ navigation }) => {
+  const { login } = useUser();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -28,11 +30,8 @@ const LoginScreen = ({ navigation }) => {
       );
 
       if (user) {
-        await StorageService.saveLoggedInUser(user);
-        navigation.navigate('MainTabs', {
-          isAdmin: user.isAdmin || false,
-          username: user.username,
-        });
+        await login(user);
+        navigation.navigate('MainTabs');
       } else {
         Alert.alert('登录失败', '用户名或密码错误');
       }

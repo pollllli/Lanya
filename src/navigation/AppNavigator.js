@@ -13,27 +13,16 @@ import AdminEditScreen from '../screens/AdminEditScreen';
 import BOMScreen from '../screens/BOMScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ConnectionScreen from '../screens/ConnectionScreen';
-import StorageService from '../services/StorageService';
-import { logError } from '../utils/ErrorHandler';
-
-/**
- * 主标签导航组件
- * 包含应用的主要功能模块：库存、连接、BOM配单和个人中心
- * @param {Object} props - 组件属性
- * @param {Object} props.route - 路由对象，包含用户权限信息
- */
+import { useUser } from '../context/UserContext';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 // 主标签导航
-const MainTabNavigator = ({ route }) => {
-  const { isAdmin, username } = route.params || {
-    isAdmin: false,
-    username: 'user',
-  };
-
-  console.log('MainTabNavigator received:', { isAdmin, username });
+const MainTabNavigator = () => {
+  const { user } = useUser();
+  const isAdmin = user?.isAdmin || false;
+  const username = user?.username || 'user';
 
   return (
     <Tab.Navigator
@@ -92,7 +81,7 @@ const MainTabNavigator = ({ route }) => {
               ...props.route,
               params: {
                 ...props.route.params,
-                username: username || (isAdmin ? 'admin' : 'user'),
+                username,
                 isAdmin,
               },
             }}
@@ -108,45 +97,12 @@ const MainTabNavigator = ({ route }) => {
  * 负责管理应用的登录状态和路由配置
  */
 const AppNavigator = () => {
-  const [initialRoute, setInitialRoute] = useState('Login');
-  const [isLoading, setIsLoading] = useState(true);
-
-  const [loggedInUser, setLoggedInUser] = useState(null);
-
-  useEffect(() => {
-    /**
-     * 检查登录状态
-     * 应用启动时检查是否有保存的登录用户信息
-     * 如果有，直接导航到主界面
-     */
-    const checkLoginStatus = async () => {
-      try {
-        // 检查是否有保存的登录用户信息
-        const user = await StorageService.getLoggedInUser();
-        if (user) {
-          // 如果有保存的用户信息，直接导航到主界面
-          setLoggedInUser(user);
-          setInitialRoute('MainTabs');
-        }
-      } catch (error) {
-        logError('检查登录状态失败', error, 'AppNavigator.checkLoginStatus');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkLoginStatus();
-  }, []);
-
-  if (isLoading) {
-    // 可以添加一个加载屏幕
-    return null;
-  }
+  const { user } = useUser();
 
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName={initialRoute}
+        initialRouteName={user ? 'MainTabs' : 'Login'}
         screenOptions={{
           headerStyle: {
             backgroundColor: '#f5f5f5',
@@ -189,25 +145,7 @@ const AppNavigator = () => {
           }}
         />
         <Stack.Screen name="MainTabs" options={{ headerShown: false }}>
-          {(props) => (
-            <MainTabNavigator
-              {...props}
-              route={{
-                ...props.route,
-                params: {
-                  ...props.route.params,
-                  isAdmin:
-                    props.route.params?.isAdmin ||
-                    loggedInUser?.isAdmin ||
-                    false,
-                  username:
-                    props.route.params?.username ||
-                    loggedInUser?.username ||
-                    'user',
-                },
-              }}
-            />
-          )}
+          {(props) => <MainTabNavigator {...props} />}
         </Stack.Screen>
         <Stack.Screen
           name="DeviceDetail"

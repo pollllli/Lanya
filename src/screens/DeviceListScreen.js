@@ -1,6 +1,23 @@
-import React, { useEffect, useMemo, useCallback, useReducer, useRef } from 'react';
+import React, {
+  useEffect,
+  useMemo,
+  useCallback,
+  useReducer,
+  useRef,
+} from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, TextInput, Modal, ScrollView, Animated, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  TextInput,
+  Modal,
+  ScrollView,
+  Animated,
+  ActivityIndicator,
+} from 'react-native';
 import StorageService from '../services/StorageService';
 import { logError, formatErrorMessage } from '../utils/ErrorHandler';
 import { generateSearchSuggestions, filterDevices } from '../utils/SearchUtils';
@@ -26,7 +43,8 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       voltage: '',
       capacitance: '',
       inductance: '',
-      current: ''
+      current: '',
+      package: '',
     },
     isAdvancedSearchMode: false,
     successMessage: '',
@@ -36,17 +54,21 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       { id: '1', name: '器件架 A' },
       { id: '2', name: '器件架 B' },
       { id: '3', name: '器件架 C' },
-      { id: '4', name: '器件架 D' }
+      { id: '4', name: '器件架 D' },
     ],
     selectedShelf: '',
-    showShelfDropdown: false
+    showShelfDropdown: false,
   };
 
   // Reducer函数
   const reducer = (state, action) => {
     switch (action.type) {
       case 'SET_DEVICES':
-        return { ...state, devices: action.payload, filteredDevices: action.payload };
+        return {
+          ...state,
+          devices: action.payload,
+          filteredDevices: action.payload,
+        };
       case 'SET_FILTERED_DEVICES':
         return { ...state, filteredDevices: action.payload };
       case 'SET_SEARCH_QUERY':
@@ -54,7 +76,11 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       case 'SET_SELECTED_DEVICES':
         return { ...state, selectedDevices: action.payload };
       case 'SET_SELECTION_MODE':
-        return { ...state, isSelectionMode: action.payload, selectedDevices: [] };
+        return {
+          ...state,
+          isSelectionMode: action.payload,
+          selectedDevices: [],
+        };
       case 'SET_SEARCH_HISTORY':
         return { ...state, searchHistory: action.payload };
       case 'SET_SHOW_SEARCH_HISTORY':
@@ -79,29 +105,29 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
         return {
           ...state,
           selectedDevices: state.selectedDevices.includes(action.payload)
-            ? state.selectedDevices.filter(id => id !== action.payload)
-            : [...state.selectedDevices, action.payload]
+            ? state.selectedDevices.filter((id) => id !== action.payload)
+            : [...state.selectedDevices, action.payload],
         };
       case 'RESET_ADVANCED_SEARCH':
         return {
           ...state,
           advancedSearchParams: initialState.advancedSearchParams,
-          isAdvancedSearchMode: false
+          isAdvancedSearchMode: false,
         };
       case 'SET_ADVANCED_SEARCH_MODE':
         return {
           ...state,
-          isAdvancedSearchMode: action.payload
+          isAdvancedSearchMode: action.payload,
         };
       case 'CLEAR_SEARCH_HISTORY':
         return {
           ...state,
-          searchHistory: []
+          searchHistory: [],
         };
       case 'SET_LOADING':
         return {
           ...state,
-          isLoading: action.payload
+          isLoading: action.payload,
         };
       default:
         return state;
@@ -111,7 +137,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const successAnimation = useMemo(() => new Animated.Value(0), []);
   const lastConnectedStatus = useRef(false);
-  
+
   // 解构状态
   const {
     devices,
@@ -131,24 +157,24 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     isLoading,
     shelves,
     selectedShelf,
-    showShelfDropdown
+    showShelfDropdown,
   } = state;
 
   useEffect(() => {
     loadDevices();
     loadSearchHistory();
     checkConnectionStatus();
-    
+
     // 注册蓝牙断开回调（使用命名函数便于清理）
     const handleBluetoothDisconnected = () => {
       console.log('收到蓝牙断开通知，更新连接状态');
       dispatch({ type: 'SET_CONNECTED', payload: false });
     };
-    
+
     // 保存旧的回调（如果有）
     const previousCallback = global.onBluetoothDisconnected;
     global.onBluetoothDisconnected = handleBluetoothDisconnected;
-    
+
     // 清理回调
     return () => {
       // 恢复之前的回调（如果有的话）
@@ -160,21 +186,75 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     };
   }, []);
 
-  // 当页面获得焦点时重新加载设备数据
+  // 当页面获得焦点时重新加载设备数据，并保留搜索状态
   useFocusEffect(
     useCallback(() => {
       console.log('DeviceListScreen获得焦点，重新加载数据');
+      
+      // 保存当前搜索状态
+      const currentSearchQuery = searchQuery;
+      const currentSelectedShelf = selectedShelf;
+      const currentAdvancedParams = { ...advancedSearchParams };
+      const currentIsAdvancedMode = isAdvancedSearchMode;
+      
+      // 重新加载设备数据
       loadDevices();
-    }, [])
+      
+      // 延迟执行，确保设备数据已加载完成
+      setTimeout(() => {
+        // 如果之前有搜索条件，重新应用
+        if (currentIsAdvancedMode) {
+          // 重新应用高级搜索
+          const filtered = devices.filter((device) => {
+            let match = true;
+            if (currentAdvancedParams.category && currentAdvancedParams.category.trim() !== '') {
+              const categoryQuery = currentAdvancedParams.category.toLowerCase();
+              match = match && device.category && device.category.toLowerCase().includes(categoryQuery);
+            }
+            if (currentAdvancedParams.name) {
+              match = match && device.name && device.name.toLowerCase().includes(currentAdvancedParams.name.toLowerCase());
+            }
+            if (currentAdvancedParams.function) {
+              match = match && device.function && device.function.toLowerCase().includes(currentAdvancedParams.function.toLowerCase());
+            }
+            if (currentAdvancedParams.resistance) {
+              match = match && device.resistance && device.resistance.toLowerCase().includes(currentAdvancedParams.resistance.toLowerCase());
+            }
+            if (currentAdvancedParams.voltage) {
+              match = match && device.voltage && device.voltage.toLowerCase().includes(currentAdvancedParams.voltage.toLowerCase());
+            }
+            if (currentAdvancedParams.capacitance) {
+              match = match && device.capacitance && device.capacitance.toLowerCase().includes(currentAdvancedParams.capacitance.toLowerCase());
+            }
+            if (currentAdvancedParams.inductance) {
+              match = match && device.inductance && device.inductance.toLowerCase().includes(currentAdvancedParams.inductance.toLowerCase());
+            }
+            if (currentAdvancedParams.current) {
+              match = match && device.current && device.current.toLowerCase().includes(currentAdvancedParams.current.toLowerCase());
+            }
+            if (currentAdvancedParams.package) {
+              match = match && device.package && device.package.toLowerCase().includes(currentAdvancedParams.package.toLowerCase());
+            }
+            return match;
+          });
+          dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
+          dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: true });
+        } else if (currentSearchQuery.trim() !== '' || currentSelectedShelf) {
+          // 重新应用普通搜索或器件架筛选
+          const filtered = filterDevices(devices, currentSearchQuery, currentSelectedShelf);
+          dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
+        }
+      }, 100);
+    }, [searchQuery, selectedShelf, advancedSearchParams, isAdvancedSearchMode, devices, loadDevices, dispatch])
   );
 
   // 定期检查连接状态，确保指示器实时更新
   const checkConnectionStatusRef = useRef(checkConnectionStatus);
-  
+
   useEffect(() => {
     checkConnectionStatusRef.current = checkConnectionStatus;
   }, [checkConnectionStatus]);
-  
+
   useEffect(() => {
     const checkInterval = setInterval(() => {
       checkConnectionStatusRef.current();
@@ -189,7 +269,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   const checkConnectionStatus = useCallback(async () => {
     let connected = false;
     let statusMessage = '';
-    
+
     // 首先检查全局连接对象是否存在（蓝牙断开时会被清除）
     if (global.deviceConnection && global.deviceConnection.handler) {
       const handler = global.deviceConnection.handler;
@@ -199,7 +279,9 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
           // 直接调用设备的isConnected方法检测真实连接状态
           const isDeviceConnected = await handler.connectedDevice.isConnected();
           connected = isDeviceConnected;
-          statusMessage = connected ? '已连接（设备在线）' : '已断开（设备离线）';
+          statusMessage = connected
+            ? '已连接（设备在线）'
+            : '已断开（设备离线）';
         } catch (error) {
           connected = false;
           statusMessage = '已断开（检测失败）';
@@ -210,13 +292,13 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       connected = false;
       statusMessage = '已断开（全局连接对象已清除）';
     }
-    
+
     // 只在连接状态发生变化时输出日志
     if (connected !== lastConnectedStatus.current) {
       console.log('蓝牙连接状态:', statusMessage);
       lastConnectedStatus.current = connected;
     }
-    
+
     dispatch({ type: 'SET_CONNECTED', payload: connected });
   }, [dispatch]);
 
@@ -231,33 +313,47 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     }
   }, [dispatch]);
 
-  const saveSearchHistory = useCallback(async (query) => {
-    if (!query.trim()) return;
-    
-    try {
-      let updatedHistory = searchHistory.filter(item => item !== query);
-      updatedHistory.unshift(query);
-      updatedHistory = updatedHistory.slice(0, 10); // 只保留最近10条
-      dispatch({ type: 'SET_SEARCH_HISTORY', payload: updatedHistory });
-      await StorageService.saveSearchHistory(updatedHistory);
-    } catch (error) {
-      logError('保存搜索历史失败', error, 'DeviceListScreen.saveSearchHistory');
-    }
-  }, [searchHistory, dispatch]);
+  const saveSearchHistory = useCallback(
+    async (query) => {
+      if (!query.trim()) return;
+
+      try {
+        let updatedHistory = searchHistory.filter((item) => item !== query);
+        updatedHistory.unshift(query);
+        updatedHistory = updatedHistory.slice(0, 10); // 只保留最近10条
+        dispatch({ type: 'SET_SEARCH_HISTORY', payload: updatedHistory });
+        await StorageService.saveSearchHistory(updatedHistory);
+      } catch (error) {
+        logError(
+          '保存搜索历史失败',
+          error,
+          'DeviceListScreen.saveSearchHistory'
+        );
+      }
+    },
+    [searchHistory, dispatch]
+  );
 
   const clearSearchHistory = useCallback(async () => {
     try {
       dispatch({ type: 'CLEAR_SEARCH_HISTORY' });
       await StorageService.clearSearchHistory();
     } catch (error) {
-      logError('清除搜索历史失败', error, 'DeviceListScreen.clearSearchHistory');
+      logError(
+        '清除搜索历史失败',
+        error,
+        'DeviceListScreen.clearSearchHistory'
+      );
     }
   }, [dispatch]);
 
-  const handleGenerateSearchSuggestionsRef = useRef(handleGenerateSearchSuggestions);
+  const handleGenerateSearchSuggestionsRef = useRef(
+    handleGenerateSearchSuggestions
+  );
 
   useEffect(() => {
-    handleGenerateSearchSuggestionsRef.current = handleGenerateSearchSuggestions;
+    handleGenerateSearchSuggestionsRef.current =
+      handleGenerateSearchSuggestions;
   }, [handleGenerateSearchSuggestions]);
 
   useEffect(() => {
@@ -268,35 +364,50 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     }
   }, [searchQuery, dispatch]);
 
-  const handleGenerateSearchSuggestions = useCallback((query) => {
-    if (!query || !query.trim()) {
-      dispatch({ type: 'SET_SEARCH_SUGGESTIONS', payload: [] });
+  const handleGenerateSearchSuggestions = useCallback(
+    (query) => {
+      if (!query || !query.trim()) {
+        dispatch({ type: 'SET_SEARCH_SUGGESTIONS', payload: [] });
+        dispatch({ type: 'SET_SHOW_SUGGESTIONS', payload: false });
+        return;
+      }
+
+      const suggestions = generateSearchSuggestions(
+        query,
+        devices,
+        searchHistory,
+        5
+      );
+      dispatch({ type: 'SET_SEARCH_SUGGESTIONS', payload: suggestions });
+      dispatch({
+        type: 'SET_SHOW_SUGGESTIONS',
+        payload: suggestions.length > 0,
+      });
+    },
+    [devices, searchHistory, dispatch]
+  );
+
+  const handleSearch = useCallback(
+    (query) => {
+      dispatch({ type: 'SET_SEARCH_QUERY', payload: query });
+      dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: false });
+      saveSearchHistory(query);
+      dispatch({ type: 'SET_SHOW_SEARCH_HISTORY', payload: false });
       dispatch({ type: 'SET_SHOW_SUGGESTIONS', payload: false });
-      return;
-    }
-
-    const suggestions = generateSearchSuggestions(query, devices, searchHistory, 5);
-    dispatch({ type: 'SET_SEARCH_SUGGESTIONS', payload: suggestions });
-    dispatch({ type: 'SET_SHOW_SUGGESTIONS', payload: suggestions.length > 0 });
-  }, [devices, searchHistory, dispatch]);
-
-  const handleSearch = useCallback((query) => {
-    dispatch({ type: 'SET_SEARCH_QUERY', payload: query });
-    dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: false });
-    saveSearchHistory(query);
-    dispatch({ type: 'SET_SHOW_SEARCH_HISTORY', payload: false });
-    dispatch({ type: 'SET_SHOW_SUGGESTIONS', payload: false });
-  }, [saveSearchHistory, dispatch]);
+    },
+    [saveSearchHistory, dispatch]
+  );
 
   const loadDevices = useCallback(async () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
       // 先尝试从存储中读取数据
       const storedDevices = await StorageService.getDevices();
-      
+
       if (storedDevices.length > 0) {
         // 检查是否是旧的默认数据，如果是则清除
-        const isOldDefaultData = storedDevices.length >= 10 && storedDevices[0]?.name?.includes('10Ω');
+        const isOldDefaultData =
+          storedDevices.length >= 10 && storedDevices[0]?.name?.includes('10Ω');
         if (isOldDefaultData) {
           console.log('检测到旧的默认数据，正在清除...');
           await StorageService.saveDevices([]);
@@ -319,44 +430,57 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   }, [dispatch]);
 
   // 根据器件架筛选设备
-  const filterDevicesByShelf = useCallback((devicesList, shelfId) => {
-    const filtered = devicesList.filter(device => device.shelfId === shelfId);
-    dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
-  }, [dispatch]);
+  const filterDevicesByShelf = useCallback(
+    (devicesList, shelfId) => {
+      const filtered = devicesList.filter(
+        (device) => device.shelfId === shelfId
+      );
+      dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
+    },
+    [dispatch]
+  );
 
   // 请求器件（点亮对应灯）
-  const requestDevice = useCallback(async (device, hardwarePosition) => {
-    try {
-      // 检查是否有蓝牙连接
-      if (!isConnected || !global.deviceConnection) {
-        Alert.alert('提示', '请先在连接页面连接蓝牙设备');
-        // 更新连接状态为未连接
-        dispatch({ type: 'SET_CONNECTED', payload: false });
-        return;
+  const requestDevice = useCallback(
+    async (device, hardwarePosition) => {
+      try {
+        // 检查是否有蓝牙连接
+        if (!isConnected || !global.deviceConnection) {
+          Alert.alert('提示', '请先在连接页面连接蓝牙设备');
+          // 更新连接状态为未连接
+          dispatch({ type: 'SET_CONNECTED', payload: false });
+          return;
+        }
+
+        // 构建请求命令 - 使用硬件位置作为灯ID
+        const requestCommand = {
+          type: 'lightOn',
+          lightId: hardwarePosition,
+        };
+
+        // 使用全局蓝牙连接发送命令
+        const { handler } = global.deviceConnection;
+        const response = await handler.sendCommand(requestCommand);
+
+        if (response.success) {
+          Alert.alert(
+            '成功',
+            `已发送器件请求: ${device.name} (位置: ${hardwarePosition})`
+          );
+          showSuccessMessage(
+            `已请求器件: ${device.name} (位置: ${hardwarePosition})`
+          );
+        } else {
+          Alert.alert('错误', `请求器件失败: ${response.message}`);
+        }
+      } catch (error) {
+        logError('请求器件失败', error, 'DeviceListScreen.requestDevice');
+        const errorMessage = `请求器件失败: ${formatErrorMessage(error)}`;
+        Alert.alert('错误', errorMessage);
       }
-
-      // 构建请求命令 - 使用硬件位置作为灯ID
-      const requestCommand = {
-        type: 'lightOn',
-        lightId: hardwarePosition
-      };
-
-      // 使用全局蓝牙连接发送命令
-      const { handler } = global.deviceConnection;
-      const response = await handler.sendCommand(requestCommand);
-
-      if (response.success) {
-        Alert.alert('成功', `已发送器件请求: ${device.name} (位置: ${hardwarePosition})`);
-        showSuccessMessage(`已请求器件: ${device.name} (位置: ${hardwarePosition})`);
-      } else {
-        Alert.alert('错误', `请求器件失败: ${response.message}`);
-      }
-    } catch (error) {
-      logError('请求器件失败', error, 'DeviceListScreen.requestDevice');
-      const errorMessage = `请求器件失败: ${formatErrorMessage(error)}`;
-      Alert.alert('错误', errorMessage);
-    }
-  }, [isConnected, showSuccessMessage]);
+    },
+    [isConnected, showSuccessMessage]
+  );
 
   // 使用 useMemo 缓存过滤后的设备列表
   const memoizedFilteredDevices = useMemo(() => {
@@ -364,7 +488,13 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       return filteredDevices;
     }
     return filterDevices(devices, searchQuery, selectedShelf);
-  }, [devices, searchQuery, selectedShelf, isAdvancedSearchMode, filteredDevices]);
+  }, [
+    devices,
+    searchQuery,
+    selectedShelf,
+    isAdvancedSearchMode,
+    filteredDevices,
+  ]);
 
   // 使用 useMemo 缓存搜索建议
   const memoizedSearchSuggestions = useMemo(() => {
@@ -383,7 +513,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       const { handler } = global.deviceConnection;
       const response = await handler.sendCommand({
         type: 'controlAll',
-        state: true
+        state: true,
       });
 
       if (response.success) {
@@ -393,7 +523,11 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
         Alert.alert('错误', `操作失败: ${response.message}`);
       }
     } catch (error) {
-      logError('控制所有灯失败', error, 'DeviceListScreen.handleControlAllLightsOn');
+      logError(
+        '控制所有灯失败',
+        error,
+        'DeviceListScreen.handleControlAllLightsOn'
+      );
       Alert.alert('错误', '发送命令失败，请检查设备连接');
     }
   }, [isConnected, showSuccessMessage]);
@@ -410,7 +544,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       const { handler } = global.deviceConnection;
       const response = await handler.sendCommand({
         type: 'controlAll',
-        state: false
+        state: false,
       });
 
       if (response.success) {
@@ -420,41 +554,51 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
         Alert.alert('错误', `操作失败: ${response.message}`);
       }
     } catch (error) {
-      logError('控制所有灯失败', error, 'DeviceListScreen.handleControlAllLightsOff');
+      logError(
+        '控制所有灯失败',
+        error,
+        'DeviceListScreen.handleControlAllLightsOff'
+      );
       Alert.alert('错误', '发送命令失败，请检查设备连接');
     }
   }, [isConnected, showSuccessMessage]);
 
-  const handleDevicePress = useCallback((device) => {
-    navigation.navigate('DeviceDetail', { device, isAdmin });
-  }, [navigation, isAdmin]);
+  const handleDevicePress = useCallback(
+    (device) => {
+      navigation.navigate('DeviceDetail', { device, isAdmin });
+    },
+    [navigation, isAdmin]
+  );
 
   // 单个器件删除
-  const handleDeleteDevice = useCallback(async (device) => {
-    Alert.alert(
-      '确认删除',
-      `确定要删除器件 "${device.name}" 吗？`,
-      [
+  const handleDeleteDevice = useCallback(
+    async (device) => {
+      Alert.alert('确认删除', `确定要删除器件 "${device.name}" 吗？`, [
         { text: '取消', style: 'cancel' },
         {
           text: '删除',
           style: 'destructive',
           onPress: async () => {
             try {
-              const updatedDevices = devices.filter(d => d.id !== device.id);
+              const updatedDevices = devices.filter((d) => d.id !== device.id);
               await StorageService.saveDevices(updatedDevices);
               dispatch({ type: 'SET_DEVICES', payload: updatedDevices });
               showSuccessMessage('器件已删除');
               Alert.alert('成功', '器件已删除');
             } catch (error) {
-              logError('删除器件失败', error, 'DeviceListScreen.handleDeleteDevice');
+              logError(
+                '删除器件失败',
+                error,
+                'DeviceListScreen.handleDeleteDevice'
+              );
               Alert.alert('错误', '删除器件失败');
             }
-          }
-        }
-      ]
-    );
-  }, [devices, dispatch, showSuccessMessage]);
+          },
+        },
+      ]);
+    },
+    [devices, dispatch, showSuccessMessage]
+  );
 
   // 批量删除器件
   const handleBatchDelete = useCallback(() => {
@@ -473,17 +617,23 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const updatedDevices = devices.filter(d => !selectedDevices.includes(d.id));
+              const updatedDevices = devices.filter(
+                (d) => !selectedDevices.includes(d.id)
+              );
               await StorageService.saveDevices(updatedDevices);
               dispatch({ type: 'SET_DEVICES', payload: updatedDevices });
               dispatch({ type: 'SET_SELECTION_MODE', payload: false });
               showSuccessMessage(`已删除 ${selectedDevices.length} 个器件`);
             } catch (error) {
-              logError('批量删除器件失败', error, 'DeviceListScreen.handleBatchDelete');
+              logError(
+                '批量删除器件失败',
+                error,
+                'DeviceListScreen.handleBatchDelete'
+              );
               Alert.alert('错误', '删除器件失败');
             }
-          }
-        }
+          },
+        },
       ]
     );
   }, [selectedDevices, devices, dispatch, showSuccessMessage]);
@@ -494,43 +644,95 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   }, [isSelectionMode, dispatch]);
 
   // 切换器件选择状态
-  const toggleDeviceSelection = useCallback((deviceId) => {
-    dispatch({ type: 'TOGGLE_DEVICE_SELECTION', payload: deviceId });
-  }, [dispatch]);
+  const toggleDeviceSelection = useCallback(
+    (deviceId) => {
+      dispatch({ type: 'TOGGLE_DEVICE_SELECTION', payload: deviceId });
+    },
+    [dispatch]
+  );
 
   const handleAdvancedSearch = useCallback(() => {
-    const filtered = devices.filter(device => {
+    const filtered = devices.filter((device) => {
       let match = true;
-      
-      if (advancedSearchParams.category && advancedSearchParams.category.trim() !== '') {
+
+      if (
+        advancedSearchParams.category &&
+        advancedSearchParams.category.trim() !== ''
+      ) {
         const categoryQuery = advancedSearchParams.category.toLowerCase();
-        match = match && device.category && device.category.toLowerCase().includes(categoryQuery);
+        match =
+          match &&
+          device.category &&
+          device.category.toLowerCase().includes(categoryQuery);
       }
       if (advancedSearchParams.name) {
-        match = match && device.name && device.name.toLowerCase().includes(advancedSearchParams.name.toLowerCase());
+        match =
+          match &&
+          device.name &&
+          device.name
+            .toLowerCase()
+            .includes(advancedSearchParams.name.toLowerCase());
       }
       if (advancedSearchParams.function) {
-        match = match && device.function && device.function.toLowerCase().includes(advancedSearchParams.function.toLowerCase());
+        match =
+          match &&
+          device.function &&
+          device.function
+            .toLowerCase()
+            .includes(advancedSearchParams.function.toLowerCase());
       }
       if (advancedSearchParams.resistance) {
-        match = match && device.resistance && device.resistance.toLowerCase().includes(advancedSearchParams.resistance.toLowerCase());
+        match =
+          match &&
+          device.resistance &&
+          device.resistance
+            .toLowerCase()
+            .includes(advancedSearchParams.resistance.toLowerCase());
       }
       if (advancedSearchParams.voltage) {
-        match = match && device.voltage && device.voltage.toLowerCase().includes(advancedSearchParams.voltage.toLowerCase());
+        match =
+          match &&
+          device.voltage &&
+          device.voltage
+            .toLowerCase()
+            .includes(advancedSearchParams.voltage.toLowerCase());
       }
       if (advancedSearchParams.capacitance) {
-        match = match && device.capacitance && device.capacitance.toLowerCase().includes(advancedSearchParams.capacitance.toLowerCase());
+        match =
+          match &&
+          device.capacitance &&
+          device.capacitance
+            .toLowerCase()
+            .includes(advancedSearchParams.capacitance.toLowerCase());
       }
       if (advancedSearchParams.inductance) {
-        match = match && device.inductance && device.inductance.toLowerCase().includes(advancedSearchParams.inductance.toLowerCase());
+        match =
+          match &&
+          device.inductance &&
+          device.inductance
+            .toLowerCase()
+            .includes(advancedSearchParams.inductance.toLowerCase());
       }
       if (advancedSearchParams.current) {
-        match = match && device.current && device.current.toLowerCase().includes(advancedSearchParams.current.toLowerCase());
+        match =
+          match &&
+          device.current &&
+          device.current
+            .toLowerCase()
+            .includes(advancedSearchParams.current.toLowerCase());
       }
-      
+      if (advancedSearchParams.package) {
+        match =
+          match &&
+          device.package &&
+          device.package
+            .toLowerCase()
+            .includes(advancedSearchParams.package.toLowerCase());
+      }
+
       return match;
     });
-    
+
     dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
     dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: true });
     dispatch({ type: 'SET_SHOW_ADVANCED_SEARCH', payload: false });
@@ -541,73 +743,94 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   }, [dispatch]);
 
   // 显示成功反馈
-  const showSuccessMessage = useCallback((message) => {
-    dispatch({ type: 'SET_SUCCESS_MESSAGE', payload: message });
-    
-    // 动画显示
-    Animated.sequence([
-      Animated.timing(successAnimation, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.delay(2000),
-      Animated.timing(successAnimation, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      dispatch({ type: 'SET_SUCCESS_MESSAGE', payload: '' });
-    });
-  }, [dispatch, successAnimation]);
+  const showSuccessMessage = useCallback(
+    (message) => {
+      dispatch({ type: 'SET_SUCCESS_MESSAGE', payload: message });
 
-  const renderDeviceItem = useCallback(({ item, index }) => {
-    const isSelected = selectedDevices.includes(item.id);
-    const hardwarePosition = devices.findIndex(d => d.id === item.id) + 1;
-    
-    const handlePress = () => {
-      if (isSelectionMode) {
-        toggleDeviceSelection(item.id);
-      } else {
-        handleDevicePress(item);
-      }
-    };
-    
-    return (
-      <TouchableOpacity 
-        style={[styles.deviceTag, isSelected && styles.selectedDeviceTag]} 
-        onPress={handlePress}
-      >
-        {isSelectionMode && (
-          <View style={styles.checkboxContainer}>
-            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-              {isSelected && <Text style={styles.checkmark}>✓</Text>}
+      // 动画显示
+      Animated.sequence([
+        Animated.timing(successAnimation, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.delay(2000),
+        Animated.timing(successAnimation, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        dispatch({ type: 'SET_SUCCESS_MESSAGE', payload: '' });
+      });
+    },
+    [dispatch, successAnimation]
+  );
+
+  const renderDeviceItem = useCallback(
+    ({ item, index }) => {
+      const isSelected = selectedDevices.includes(item.id);
+      const hardwarePosition = devices.findIndex((d) => d.id === item.id) + 1;
+
+      const handlePress = () => {
+        if (isSelectionMode) {
+          toggleDeviceSelection(item.id);
+        } else {
+          handleDevicePress(item);
+        }
+      };
+
+      return (
+        <TouchableOpacity
+          style={[styles.deviceTag, isSelected && styles.selectedDeviceTag]}
+          onPress={handlePress}
+        >
+          {isSelectionMode && (
+            <View style={styles.checkboxContainer}>
+              <View
+                style={[styles.checkbox, isSelected && styles.checkboxSelected]}
+              >
+                {isSelected && <Text style={styles.checkmark}>✓</Text>}
+              </View>
             </View>
+          )}
+          <View style={styles.deviceTagContent}>
+            <View style={styles.tagRow}>
+              <Text style={styles.deviceTagId}>
+                {item.supplierId || item.id || 'N/A'}
+              </Text>
+              <Text style={styles.deviceTagCategory}>
+                {item.category || '未分类'}
+              </Text>
+            </View>
+            <View style={styles.tagNameContainer}>
+              <Text style={styles.deviceTagName}>{item.name || '未命名'}</Text>
+            </View>
+            <View style={styles.tagPackageContainer}>
+              <Text style={styles.deviceTagPackage}>
+                {item.package || 'N/A'}
+              </Text>
+            </View>
+            {/* 请求器件按钮 */}
+            <TouchableOpacity
+              style={styles.requestButton}
+              onPress={() => requestDevice(item, hardwarePosition)}
+            >
+              <Text style={styles.requestButtonText}>请求器件</Text>
+            </TouchableOpacity>
           </View>
-        )}
-        <View style={styles.deviceTagContent}>
-          <View style={styles.tagRow}>
-            <Text style={styles.deviceTagId}>{item.supplierId || item.id || 'N/A'}</Text>
-            <Text style={styles.deviceTagCategory}>{item.category || '未分类'}</Text>
-          </View>
-          <View style={styles.tagNameContainer}>
-            <Text style={styles.deviceTagName}>{item.name || '未命名'}</Text>
-          </View>
-          <View style={styles.tagPackageContainer}>
-            <Text style={styles.deviceTagPackage}>{item.package || 'N/A'}</Text>
-          </View>
-          {/* 请求器件按钮 */}
-          <TouchableOpacity 
-            style={styles.requestButton}
-            onPress={() => requestDevice(item, hardwarePosition)}
-          >
-            <Text style={styles.requestButtonText}>请求器件</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [selectedDevices, isSelectionMode, toggleDeviceSelection, handleDevicePress, requestDevice, devices]);
+        </TouchableOpacity>
+      );
+    },
+    [
+      selectedDevices,
+      isSelectionMode,
+      toggleDeviceSelection,
+      handleDevicePress,
+      requestDevice,
+      devices,
+    ]
+  );
 
   // 上架器件功能
   const handleAddDevice = useCallback(() => {
@@ -619,34 +842,44 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   }, [navigation, loadDevices]);
 
   // 处理器件架选择
-  const handleShelfSelect = useCallback((shelfId) => {
-    // 如果点击的是已选中的器件架，则取消选择，显示所有设备
-    if (shelfId === selectedShelf) {
-      dispatch({ type: 'SET_SELECTED_SHELF', payload: '' });
-    } else {
-      dispatch({ type: 'SET_SELECTED_SHELF', payload: shelfId });
-    }
-    dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: false });
-    dispatch({ type: 'SET_SHOW_SHELF_DROPDOWN', payload: false });
-    // 不再需要手动更新filteredDevices，memoizedFilteredDevices会自动根据selectedShelf重新计算
-  }, [selectedShelf, dispatch]);
+  const handleShelfSelect = useCallback(
+    (shelfId) => {
+      // 如果点击的是已选中的器件架，则取消选择，显示所有设备
+      if (shelfId === selectedShelf) {
+        dispatch({ type: 'SET_SELECTED_SHELF', payload: '' });
+      } else {
+        dispatch({ type: 'SET_SELECTED_SHELF', payload: shelfId });
+      }
+      dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: false });
+      dispatch({ type: 'SET_SHOW_SHELF_DROPDOWN', payload: false });
+      // 不再需要手动更新filteredDevices，memoizedFilteredDevices会自动根据selectedShelf重新计算
+    },
+    [selectedShelf, dispatch]
+  );
 
   return (
     <View style={styles.container}>
       {/* 器件架选择 */}
       <View style={styles.shelfSelectorContainer}>
-        <TouchableOpacity 
-          style={styles.shelfSelector} 
-          onPress={() => dispatch({ type: 'SET_SHOW_SHELF_DROPDOWN', payload: !showShelfDropdown })}
+        <TouchableOpacity
+          style={styles.shelfSelector}
+          onPress={() =>
+            dispatch({
+              type: 'SET_SHOW_SHELF_DROPDOWN',
+              payload: !showShelfDropdown,
+            })
+          }
         >
           <Text style={styles.shelfSelectorText}>
-            {selectedShelf ? shelves.find(shelf => shelf.id === selectedShelf)?.name : '全部器件'}
+            {selectedShelf
+              ? shelves.find((shelf) => shelf.id === selectedShelf)?.name
+              : '全部器件'}
           </Text>
           <Text style={styles.shelfSelectorArrow}>
             {showShelfDropdown ? '▲' : '▼'}
           </Text>
         </TouchableOpacity>
-        
+
         {/* 蓝牙连接状态指示器 */}
         <View style={styles.connectionStatusContainer}>
           {isConnected ? (
@@ -655,29 +888,35 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
               <Text style={styles.statusText}>已连接</Text>
             </View>
           ) : (
-            <View style={[styles.statusIndicator, styles.disconnectedIndicator]}>
+            <View
+              style={[styles.statusIndicator, styles.disconnectedIndicator]}
+            >
               <Text style={styles.statusIcon}>⚪</Text>
               <Text style={styles.statusText}>未连接</Text>
             </View>
           )}
         </View>
-        
+
         {/* 器件架下拉菜单 */}
         {showShelfDropdown && (
           <View style={styles.shelfDropdown}>
-            {shelves.map(shelf => (
+            {shelves.map((shelf) => (
               <TouchableOpacity
                 key={shelf.id}
                 style={[
                   styles.shelfDropdownItem,
-                  selectedShelf === shelf.id && styles.shelfDropdownItemSelected
+                  selectedShelf === shelf.id &&
+                    styles.shelfDropdownItemSelected,
                 ]}
                 onPress={() => handleShelfSelect(shelf.id)}
               >
-                <Text style={[
-                  styles.shelfDropdownItemText,
-                  selectedShelf === shelf.id && styles.shelfDropdownItemTextSelected
-                ]}>
+                <Text
+                  style={[
+                    styles.shelfDropdownItemText,
+                    selectedShelf === shelf.id &&
+                      styles.shelfDropdownItemTextSelected,
+                  ]}
+                >
                   {shelf.name}
                 </Text>
               </TouchableOpacity>
@@ -691,12 +930,29 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
         <View style={styles.searchInputWrapper}>
           <TextInput
             style={styles.searchInput}
-            placeholder="搜索器件名称、功能或编号..."
+            placeholder="搜索器件名称或编号..."
             value={searchQuery}
-            onChangeText={(text) => dispatch({ type: 'SET_SEARCH_QUERY', payload: text })}
-            onFocus={() => dispatch({ type: 'SET_SHOW_SEARCH_HISTORY', payload: true })}
+            onChangeText={(text) =>
+              dispatch({ type: 'SET_SEARCH_QUERY', payload: text })
+            }
+            onFocus={() =>
+              dispatch({ type: 'SET_SHOW_SEARCH_HISTORY', payload: true })
+            }
           />
-          <TouchableOpacity 
+          {/* 清除搜索按钮 */}
+          {(searchQuery || isAdvancedSearchMode) && (
+            <TouchableOpacity
+              style={styles.clearSearchButton}
+              onPress={() => {
+                dispatch({ type: 'SET_SEARCH_QUERY', payload: '' });
+                dispatch({ type: 'RESET_ADVANCED_SEARCH' });
+                dispatch({ type: 'SET_SELECTED_SHELF', payload: '' });
+              }}
+            >
+              <Text style={styles.clearSearchButtonText}>清除</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
             style={styles.advancedSearchButton}
             onPress={() => {
               resetAdvancedSearch();
@@ -706,7 +962,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
             <Text style={styles.advancedSearchButtonText}>高级</Text>
           </TouchableOpacity>
         </View>
-        
+
         {/* 搜索历史 */}
         {showSearchHistory && searchHistory.length > 0 && (
           <View style={styles.searchHistoryContainer}>
@@ -729,7 +985,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
             </ScrollView>
           </View>
         )}
-        
+
         {/* 搜索建议 */}
         {showSuggestions && memoizedSearchSuggestions.length > 0 && (
           <View style={styles.suggestionsContainer}>
@@ -751,48 +1007,65 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
         <View style={styles.adminButtonsContainer}>
           {isSelectionMode ? (
             <>
-              <TouchableOpacity style={styles.cancelButton} onPress={toggleSelectionMode}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={toggleSelectionMode}
+              >
                 <Text style={styles.cancelButtonText}>取消</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.deleteButton, selectedDevices.length === 0 && styles.disabledButton]} 
+              <TouchableOpacity
+                style={[
+                  styles.deleteButton,
+                  selectedDevices.length === 0 && styles.disabledButton,
+                ]}
                 onPress={handleBatchDelete}
                 disabled={selectedDevices.length === 0}
               >
-                <Text style={styles.deleteButtonText}>删除 ({selectedDevices.length})</Text>
+                <Text style={styles.deleteButtonText}>
+                  删除 ({selectedDevices.length})
+                </Text>
               </TouchableOpacity>
             </>
           ) : (
             <>
-              <TouchableOpacity style={styles.addButton} onPress={handleAddDevice}>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={handleAddDevice}
+              >
                 <Text style={styles.addButtonText}>上架器件</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.selectButton} onPress={toggleSelectionMode}>
+              <TouchableOpacity
+                style={styles.selectButton}
+                onPress={toggleSelectionMode}
+              >
                 <Text style={styles.selectButtonText}>批量选择</Text>
               </TouchableOpacity>
             </>
           )}
         </View>
       )}
-      
+
       {/* 控制所有灯按钮 */}
       <View style={styles.controlAllButtonsContainer}>
-        <TouchableOpacity 
-          style={[styles.controlAllButton, styles.controlAllOnButton]} 
+        <TouchableOpacity
+          style={[styles.controlAllButton, styles.controlAllOnButton]}
           onPress={handleControlAllLightsOn}
         >
           <Text style={styles.controlAllButtonText}>点亮所有灯</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.controlAllButton, styles.controlAllOffButton]} 
+        <TouchableOpacity
+          style={[styles.controlAllButton, styles.controlAllOffButton]}
           onPress={handleControlAllLightsOff}
         >
           <Text style={styles.controlAllButtonText}>熄灭所有灯</Text>
         </TouchableOpacity>
       </View>
-      
+
       {/* 设备标签列表 */}
-      <ScrollView style={styles.tagsContainer} showsVerticalScrollIndicator={true}>
+      <ScrollView
+        style={styles.tagsContainer}
+        showsVerticalScrollIndicator={true}
+      >
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#1976d2" />
@@ -817,120 +1090,183 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
               {searchQuery.trim() ? '未找到匹配的器件' : '暂无器件数据'}
             </Text>
             <Text style={styles.emptySubtitle}>
-              {searchQuery.trim() 
-                ? '请尝试使用其他关键词搜索，或检查拼写是否正确' 
+              {searchQuery.trim()
+                ? '请尝试使用其他关键词搜索，或检查拼写是否正确'
                 : '当前器件架中还没有器件'}
             </Text>
           </View>
         )}
       </ScrollView>
-      
+
       {/* 高级搜索模态框 */}
       <Modal
         visible={showAdvancedSearch}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => dispatch({ type: 'SET_SHOW_ADVANCED_SEARCH', payload: false })}
+        onRequestClose={() =>
+          dispatch({ type: 'SET_SHOW_ADVANCED_SEARCH', payload: false })
+        }
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>高级搜索</Text>
-            
+
             <ScrollView style={styles.advancedSearchScroll}>
               <View style={styles.advancedSearchInputContainer}>
                 <Text style={styles.advancedSearchLabel}>器件分类</Text>
                 <TextInput
                   style={styles.advancedSearchInput}
                   value={advancedSearchParams.category}
-                  onChangeText={(text) => dispatch({ type: 'SET_ADVANCED_SEARCH_PARAMS', payload: {...advancedSearchParams, category: text} })}
+                  onChangeText={(text) =>
+                    dispatch({
+                      type: 'SET_ADVANCED_SEARCH_PARAMS',
+                      payload: { ...advancedSearchParams, category: text },
+                    })
+                  }
                   placeholder="输入器件分类（如：电阻器、传感器）"
                 />
               </View>
-              
+
               <View style={styles.advancedSearchInputContainer}>
                 <Text style={styles.advancedSearchLabel}>器件名称</Text>
                 <TextInput
                   style={styles.advancedSearchInput}
                   value={advancedSearchParams.name}
-                  onChangeText={(text) => dispatch({ type: 'SET_ADVANCED_SEARCH_PARAMS', payload: {...advancedSearchParams, name: text} })}
+                  onChangeText={(text) =>
+                    dispatch({
+                      type: 'SET_ADVANCED_SEARCH_PARAMS',
+                      payload: { ...advancedSearchParams, name: text },
+                    })
+                  }
                   placeholder="输入器件名称"
                 />
               </View>
-              
+
               <View style={styles.advancedSearchInputContainer}>
                 <Text style={styles.advancedSearchLabel}>功能描述</Text>
                 <TextInput
                   style={styles.advancedSearchInput}
                   value={advancedSearchParams.function}
-                  onChangeText={(text) => dispatch({ type: 'SET_ADVANCED_SEARCH_PARAMS', payload: {...advancedSearchParams, function: text} })}
+                  onChangeText={(text) =>
+                    dispatch({
+                      type: 'SET_ADVANCED_SEARCH_PARAMS',
+                      payload: { ...advancedSearchParams, function: text },
+                    })
+                  }
                   placeholder="输入功能描述"
                 />
               </View>
-              
+
               <View style={styles.advancedSearchInputContainer}>
                 <Text style={styles.advancedSearchLabel}>电阻</Text>
                 <TextInput
                   style={styles.advancedSearchInput}
                   value={advancedSearchParams.resistance}
-                  onChangeText={(text) => dispatch({ type: 'SET_ADVANCED_SEARCH_PARAMS', payload: {...advancedSearchParams, resistance: text} })}
+                  onChangeText={(text) =>
+                    dispatch({
+                      type: 'SET_ADVANCED_SEARCH_PARAMS',
+                      payload: { ...advancedSearchParams, resistance: text },
+                    })
+                  }
                   placeholder="输入电阻值"
                 />
               </View>
-              
+
               <View style={styles.advancedSearchInputContainer}>
                 <Text style={styles.advancedSearchLabel}>电压</Text>
                 <TextInput
                   style={styles.advancedSearchInput}
                   value={advancedSearchParams.voltage}
-                  onChangeText={(text) => dispatch({ type: 'SET_ADVANCED_SEARCH_PARAMS', payload: {...advancedSearchParams, voltage: text} })}
+                  onChangeText={(text) =>
+                    dispatch({
+                      type: 'SET_ADVANCED_SEARCH_PARAMS',
+                      payload: { ...advancedSearchParams, voltage: text },
+                    })
+                  }
                   placeholder="输入电压值"
                 />
               </View>
-              
+
               <View style={styles.advancedSearchInputContainer}>
                 <Text style={styles.advancedSearchLabel}>电容</Text>
                 <TextInput
                   style={styles.advancedSearchInput}
                   value={advancedSearchParams.capacitance}
-                  onChangeText={(text) => dispatch({ type: 'SET_ADVANCED_SEARCH_PARAMS', payload: {...advancedSearchParams, capacitance: text} })}
+                  onChangeText={(text) =>
+                    dispatch({
+                      type: 'SET_ADVANCED_SEARCH_PARAMS',
+                      payload: { ...advancedSearchParams, capacitance: text },
+                    })
+                  }
                   placeholder="输入电容值"
                 />
               </View>
-              
+
               <View style={styles.advancedSearchInputContainer}>
                 <Text style={styles.advancedSearchLabel}>电感</Text>
                 <TextInput
                   style={styles.advancedSearchInput}
                   value={advancedSearchParams.inductance}
-                  onChangeText={(text) => dispatch({ type: 'SET_ADVANCED_SEARCH_PARAMS', payload: {...advancedSearchParams, inductance: text} })}
+                  onChangeText={(text) =>
+                    dispatch({
+                      type: 'SET_ADVANCED_SEARCH_PARAMS',
+                      payload: { ...advancedSearchParams, inductance: text },
+                    })
+                  }
                   placeholder="输入电感值"
                 />
               </View>
-              
+
               <View style={styles.advancedSearchInputContainer}>
                 <Text style={styles.advancedSearchLabel}>电流</Text>
                 <TextInput
                   style={styles.advancedSearchInput}
                   value={advancedSearchParams.current}
-                  onChangeText={(text) => dispatch({ type: 'SET_ADVANCED_SEARCH_PARAMS', payload: {...advancedSearchParams, current: text} })}
+                  onChangeText={(text) =>
+                    dispatch({
+                      type: 'SET_ADVANCED_SEARCH_PARAMS',
+                      payload: { ...advancedSearchParams, current: text },
+                    })
+                  }
                   placeholder="输入电流值"
                 />
               </View>
+
+              <View style={styles.advancedSearchInputContainer}>
+                <Text style={styles.advancedSearchLabel}>封装</Text>
+                <TextInput
+                  style={styles.advancedSearchInput}
+                  value={advancedSearchParams.package}
+                  onChangeText={(text) =>
+                    dispatch({
+                      type: 'SET_ADVANCED_SEARCH_PARAMS',
+                      payload: { ...advancedSearchParams, package: text },
+                    })
+                  }
+                  placeholder="输入封装类型（如：0805、0603）"
+                />
+              </View>
             </ScrollView>
-            
+
             <View style={styles.modalButtons}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.modalButton, styles.modalCancelButton]}
                 onPress={() => {
                   resetAdvancedSearch();
-                  dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: false });
+                  dispatch({
+                    type: 'SET_ADVANCED_SEARCH_MODE',
+                    payload: false,
+                  });
                   dispatch({ type: 'SET_FILTERED_DEVICES', payload: devices });
-                  dispatch({ type: 'SET_SHOW_ADVANCED_SEARCH', payload: false });
+                  dispatch({
+                    type: 'SET_SHOW_ADVANCED_SEARCH',
+                    payload: false,
+                  });
                 }}
               >
                 <Text style={styles.modalButtonText}>取消</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.modalButton, styles.modalSearchButton]}
                 onPress={handleAdvancedSearch}
               >
@@ -940,10 +1276,10 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
           </View>
         </View>
       </Modal>
-      
+
       {/* 成功反馈提示 */}
       {successMessage && (
-        <Animated.View 
+        <Animated.View
           style={[
             styles.successMessageContainer,
             {
@@ -1097,6 +1433,20 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     fontSize: 16,
     marginRight: 10,
+  },
+  clearSearchButton: {
+    backgroundColor: '#1976d2',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  clearSearchButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   advancedSearchButton: {
     backgroundColor: '#1976d2',
@@ -1338,19 +1688,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#000',
-  },
-  tagBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#1976d2',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tagBadgeText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
   },
   addButton: {
     backgroundColor: '#007AFF',

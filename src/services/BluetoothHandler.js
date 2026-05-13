@@ -11,23 +11,24 @@ import CommandBuilder from './CommandBuilder';
  * 将字符串编码为 Base64
  */
 if (typeof btoa === 'undefined') {
-  global.btoa = function(str) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  global.btoa = function (str) {
+    const chars =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     let result = '';
     let i = 0;
-    
+
     for (; i < str.length; i += 3) {
       const a = str.charCodeAt(i) || 0;
       const b = str.charCodeAt(i + 1) || 0;
       const c = str.charCodeAt(i + 2) || 0;
-      
+
       // 将3个字节编码为4个Base64字符
       result += chars[a >> 2];
       result += chars[((a & 3) << 4) | (b >> 4)];
       result += chars[((b & 15) << 2) | (c >> 6)];
       result += chars[c & 63];
     }
-    
+
     // 根据剩余字节数添加填充
     const padding = str.length % 3;
     if (padding === 1) {
@@ -37,7 +38,7 @@ if (typeof btoa === 'undefined') {
       // 剩余2个字节，需要1个=填充
       result = result.slice(0, -1) + '=';
     }
-    
+
     return result;
   };
 }
@@ -47,12 +48,13 @@ if (typeof btoa === 'undefined') {
  * 将 Base64 解码为字符串
  */
 if (typeof atob === 'undefined') {
-  global.atob = function(b64Encoded) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  global.atob = function (b64Encoded) {
+    const chars =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
     let result = '';
     let i = 0;
     b64Encoded = b64Encoded.replace(/[^A-Za-z0-9+/=]/g, '');
-    for (; i < b64Encoded.length;) {
+    for (; i < b64Encoded.length; ) {
       const a = chars.indexOf(b64Encoded.charAt(i++));
       const b = chars.indexOf(b64Encoded.charAt(i++));
       const c = chars.indexOf(b64Encoded.charAt(i++));
@@ -106,7 +108,7 @@ class BluetoothHandler {
     this.lastHeartbeatTime = 0;
     // 心跳超时时间（毫秒），超过此时间未通信则认为断开
     this.heartbeatTimeout = 2000; // 2秒
-    
+
     console.log('=== 蓝牙处理器初始化 ===');
     console.log('服务UUID:', this.serviceUUID);
     console.log('写入特征UUID:', this.writeCharacteristicUUID);
@@ -128,7 +130,7 @@ class BluetoothHandler {
         this.isInitialized = false;
         return { success: false, message: 'Web平台不支持蓝牙功能' };
       }
-      
+
       // 创建蓝牙管理器实例
       this.manager = new BleManager();
       this.isInitialized = true;
@@ -155,15 +157,15 @@ class BluetoothHandler {
         console.log('Web平台不支持蓝牙功能');
         return [];
       }
-      
+
       // 检查蓝牙管理器是否已初始化
       if (!this.isInitialized || !this.manager) {
         throw new Error('蓝牙管理器未初始化');
       }
-      
+
       this.isScanning = true;
       console.log('开始扫描蓝牙设备');
-      
+
       return new Promise((resolve, reject) => {
         const devices = [];
         // 设置10秒扫描超时
@@ -173,11 +175,11 @@ class BluetoothHandler {
           console.log('扫描超时，返回设备列表:', devices);
           resolve(devices);
         }, 10000);
-        
+
         // 开始扫描设备
         this.manager.startDeviceScan(
-          null,  // 不指定服务UUID，扫描所有设备
-          { scanMode: ScanMode.LowLatency },  // 低延迟扫描模式
+          null, // 不指定服务UUID，扫描所有设备
+          { scanMode: ScanMode.LowLatency }, // 低延迟扫描模式
           (error, device) => {
             if (error) {
               console.error('扫描错误:', error);
@@ -187,13 +189,13 @@ class BluetoothHandler {
               reject(error);
               return;
             }
-            
+
             // 只添加有名称且未重复的设备
-            if (device.name && !devices.some(d => d.id === device.id)) {
+            if (device.name && !devices.some((d) => d.id === device.id)) {
               devices.push({
                 id: device.id,
                 name: device.name,
-                rssi: device.rssi
+                rssi: device.rssi,
               });
               console.log('发现设备:', device.name, device.id, device.rssi);
             }
@@ -221,33 +223,33 @@ class BluetoothHandler {
         console.log('Web平台不支持蓝牙功能');
         throw new Error('Web平台不支持蓝牙功能');
       }
-      
+
       // 检查蓝牙管理器是否已初始化
       if (!this.isInitialized || !this.manager) {
         throw new Error('蓝牙管理器未初始化');
       }
-      
+
       console.log('=== 开始连接设备 ===');
       console.log('设备ID:', deviceId);
-      
+
       // 连接到设备
       const device = await this.manager.connectToDevice(deviceId);
       console.log('设备连接成功:', device.name);
-      
+
       // 发现设备的所有服务和特征
       await device.discoverAllServicesAndCharacteristics();
       console.log('服务和特征发现成功');
-      
+
       // 保存连接的设备对象
       this.connectedDevice = device;
       console.log('设备保存成功');
-      
+
       // 添加设备断开监听器
       this.setupDisconnectionListener(device);
-      
+
       // 详细发现服务和特征并更新UUID
       await this.discoverServicesAndCharacteristics(device);
-      
+
       console.log('=== 设备连接完成 ===');
       return { success: true, message: '设备连接成功' };
     } catch (error) {
@@ -271,71 +273,78 @@ class BluetoothHandler {
         console.log('Web平台不支持蓝牙功能');
         return;
       }
-      
+
       console.log('=== 开始详细发现服务和特征 ===');
       const services = await device.services();
       console.log('发现的服务数量:', services.length);
-      
+
       let foundWritableCharacteristic = null;
       let foundReadableCharacteristic = null;
-      
+
       // 遍历所有服务
       for (const service of services) {
         console.log('\n服务UUID:', service.uuid);
         console.log('服务对象:', service);
         const characteristics = await service.characteristics();
         console.log('  特征数量:', characteristics.length);
-        
+
         // 遍历服务的所有特征
         for (const characteristic of characteristics) {
           console.log('  特征UUID:', characteristic.uuid);
           console.log('  特征对象:', characteristic);
           console.log('  可写属性:', {
             isWritableWithResponse: characteristic.isWritableWithResponse,
-            isWritableWithoutResponse: characteristic.isWritableWithoutResponse
+            isWritableWithoutResponse: characteristic.isWritableWithoutResponse,
           });
           console.log('  可读属性:', characteristic.isReadable);
           console.log('  可通知属性:', characteristic.isNotifiable);
           console.log('  可指示属性:', characteristic.isIndicatable);
-          
+
           // 查找可写特征（优先有响应写入，其次无响应写入）
-          if (!foundWritableCharacteristic && (characteristic.isWritableWithResponse || characteristic.isWritableWithoutResponse)) {
+          if (
+            !foundWritableCharacteristic &&
+            (characteristic.isWritableWithResponse ||
+              characteristic.isWritableWithoutResponse)
+          ) {
             foundWritableCharacteristic = {
               serviceUUID: service.uuid,
               characteristicUUID: characteristic.uuid,
               isWritableWithResponse: characteristic.isWritableWithResponse,
-              isWritableWithoutResponse: characteristic.isWritableWithoutResponse
+              isWritableWithoutResponse:
+                characteristic.isWritableWithoutResponse,
             };
             console.log('  找到可写特征:', foundWritableCharacteristic);
           }
-          
+
           // 查找可读特征
           if (!foundReadableCharacteristic && characteristic.isReadable) {
             foundReadableCharacteristic = {
               serviceUUID: service.uuid,
-              characteristicUUID: characteristic.uuid
+              characteristicUUID: characteristic.uuid,
             };
             console.log('  找到可读特征:', foundReadableCharacteristic);
           }
         }
       }
-      
+
       // 更新写入特征UUID
       if (foundWritableCharacteristic) {
         this.serviceUUID = foundWritableCharacteristic.serviceUUID;
-        this.writeCharacteristicUUID = foundWritableCharacteristic.characteristicUUID;
+        this.writeCharacteristicUUID =
+          foundWritableCharacteristic.characteristicUUID;
         console.log('=== 更新为找到的可写特征 ===');
         console.log('服务UUID:', this.serviceUUID);
         console.log('写入特征UUID:', this.writeCharacteristicUUID);
       }
-      
+
       // 更新读取特征UUID
       if (foundReadableCharacteristic) {
-        this.readCharacteristicUUID = foundReadableCharacteristic.characteristicUUID;
+        this.readCharacteristicUUID =
+          foundReadableCharacteristic.characteristicUUID;
         console.log('=== 更新为找到的可读特征 ===');
         console.log('读取特征UUID:', this.readCharacteristicUUID);
       }
-      
+
       console.log('=== 服务和特征发现完成 ===');
     } catch (error) {
       console.error('发现服务和特征失败:', error);
@@ -361,34 +370,41 @@ class BluetoothHandler {
         console.log('Web平台不支持蓝牙功能');
         return {
           success: false,
-          message: 'Web平台不支持蓝牙功能'
+          message: 'Web平台不支持蓝牙功能',
         };
       }
-      
+
       // 检查设备是否已连接
       if (!this.connectedDevice || !this.manager) {
         console.error('未连接设备');
         return {
           success: false,
-          message: '未连接设备'
+          message: '未连接设备',
         };
       }
-      
+
       const deviceId = this.connectedDevice.id;
       console.log('设备ID:', deviceId);
       console.log('命令类型:', command.type);
-      
+
       // 检查必要参数
       if (!deviceId || !this.serviceUUID || !this.writeCharacteristicUUID) {
-        console.error('缺少必要的参数:', { deviceId, serviceUUID: this.serviceUUID, characteristicUUID: this.writeCharacteristicUUID });
+        console.error('缺少必要的参数:', {
+          deviceId,
+          serviceUUID: this.serviceUUID,
+          characteristicUUID: this.writeCharacteristicUUID,
+        });
         return {
           success: false,
-          message: '缺少必要的参数'
+          message: '缺少必要的参数',
         };
       }
-      
-      console.log('使用的UUID:', { serviceUUID: this.serviceUUID, characteristicUUID: this.writeCharacteristicUUID });
-      
+
+      console.log('使用的UUID:', {
+        serviceUUID: this.serviceUUID,
+        characteristicUUID: this.writeCharacteristicUUID,
+      });
+
       // 根据命令类型构建命令帧
       let frame;
       if (command.type === 'lightOn') {
@@ -402,14 +418,16 @@ class BluetoothHandler {
         frame = this.commandBuilder.buildHeartbeatCommand();
       } else if (command.type === 'controlAll') {
         // 控制所有灯
-        frame = this.commandBuilder.buildControlAllLightsCommand(command.state !== undefined ? command.state : true);
+        frame = this.commandBuilder.buildControlAllLightsCommand(
+          command.state !== undefined ? command.state : true
+        );
       } else {
         // 默认发送心跳命令
         frame = this.commandBuilder.buildHeartbeatCommand();
       }
-      
+
       console.log('构建的命令帧:', frame);
-      
+
       try {
         console.log('=== 开始发送命令 ===');
         console.log('设备ID:', deviceId);
@@ -417,8 +435,11 @@ class BluetoothHandler {
         console.log('写入特征UUID:', this.writeCharacteristicUUID);
         console.log('命令帧:', frame);
         console.log('命令帧长度:', frame.length);
-        console.log('命令帧Hex:', frame.map(b => b.toString(16).padStart(2, '0')).join(' '));
-        
+        console.log(
+          '命令帧Hex:',
+          frame.map((b) => b.toString(16).padStart(2, '0')).join(' ')
+        );
+
         // 检查设备连接状态
         try {
           const isConnected = await this.connectedDevice.isConnected();
@@ -427,13 +448,13 @@ class BluetoothHandler {
             console.error('设备已断开连接');
             return {
               success: false,
-              message: '设备已断开连接'
+              message: '设备已断开连接',
             };
           }
         } catch (error) {
           console.error('检查设备连接状态失败:', error);
         }
-        
+
         // 再次发现服务和特征（确保UUID正确）
         try {
           const services = await this.connectedDevice.services();
@@ -446,23 +467,27 @@ class BluetoothHandler {
               console.log('  特征UUID:', characteristic.uuid);
               console.log('  特征可写属性:', {
                 isWritableWithResponse: characteristic.isWritableWithResponse,
-                isWritableWithoutResponse: characteristic.isWritableWithoutResponse
+                isWritableWithoutResponse:
+                  characteristic.isWritableWithoutResponse,
               });
               console.log('  特征可读属性:', characteristic.isReadable);
               console.log('  特征可通知属性:', characteristic.isNotifiable);
             }
           }
-          
+
           // 查找服务和特征对象
-          const service = services.find(s => s.uuid === this.serviceUUID);
+          const service = services.find((s) => s.uuid === this.serviceUUID);
           if (service) {
             const characteristics = await service.characteristics();
-            const characteristic = characteristics.find(c => c.uuid === this.writeCharacteristicUUID);
+            const characteristic = characteristics.find(
+              (c) => c.uuid === this.writeCharacteristicUUID
+            );
             if (characteristic) {
               console.log('写入特征对象:', characteristic);
               console.log('写入特征可写属性:', {
                 isWritableWithResponse: characteristic.isWritableWithResponse,
-                isWritableWithoutResponse: characteristic.isWritableWithoutResponse
+                isWritableWithoutResponse:
+                  characteristic.isWritableWithoutResponse,
               });
             } else {
               console.error('未找到写入特征');
@@ -473,11 +498,11 @@ class BluetoothHandler {
         } catch (error) {
           console.error('获取特征对象失败:', error);
         }
-        
+
         // 将字节数组转换为Base64编码
         const base64Data = this.bytesToBase64(frame);
         console.log('字节帧Base64编码:', base64Data);
-        
+
         // 尝试发送命令（按优先级尝试不同的写入方式）
         console.log('尝试使用无响应写入...');
         try {
@@ -504,10 +529,12 @@ class BluetoothHandler {
             console.log('尝试使用设备对象直接写入...');
             try {
               const services = await this.connectedDevice.services();
-              const service = services.find(s => s.uuid === this.serviceUUID);
+              const service = services.find((s) => s.uuid === this.serviceUUID);
               if (service) {
                 const characteristics = await service.characteristics();
-                const characteristic = characteristics.find(c => c.uuid === this.writeCharacteristicUUID);
+                const characteristic = characteristics.find(
+                  (c) => c.uuid === this.writeCharacteristicUUID
+                );
                 if (characteristic) {
                   if (characteristic.isWritableWithoutResponse) {
                     await characteristic.writeWithoutResponse(base64Data);
@@ -530,17 +557,17 @@ class BluetoothHandler {
             }
           }
         }
-        
+
         console.log('发送命令成功');
         console.log('=== 发送命令完成 ===');
-        
+
         // 更新心跳时间
         this.updateHeartbeat();
-        
+
         return {
-          cmd: frame[2] | 0x80,  // 返回响应命令字（原命令字 | 0x80）
-          data: [0x01],          // 返回成功数据
-          success: true
+          cmd: frame[2] | 0x80, // 返回响应命令字（原命令字 | 0x80）
+          data: [0x01], // 返回成功数据
+          success: true,
         };
       } catch (error) {
         console.error('=== 发送命令失败 ===');
@@ -549,7 +576,7 @@ class BluetoothHandler {
         console.error('错误堆栈:', error.stack);
         return {
           success: false,
-          message: error.message || '发送命令失败'
+          message: error.message || '发送命令失败',
         };
       }
     } catch (error) {
@@ -557,7 +584,7 @@ class BluetoothHandler {
       console.error('错误详情:', error.message, error.stack);
       return {
         success: false,
-        message: error.message || '发送命令失败'
+        message: error.message || '发送命令失败',
       };
     }
   }
@@ -582,7 +609,14 @@ class BluetoothHandler {
     const now = Date.now();
     const elapsed = now - this.lastHeartbeatTime;
     const isAlive = elapsed <= this.heartbeatTimeout;
-    console.log('心跳检查 - 已过去:', elapsed, 'ms, 超时时间:', this.heartbeatTimeout, 'ms, 状态:', isAlive ? '正常' : '超时');
+    console.log(
+      '心跳检查 - 已过去:',
+      elapsed,
+      'ms, 超时时间:',
+      this.heartbeatTimeout,
+      'ms, 状态:',
+      isAlive ? '正常' : '超时'
+    );
     return isAlive;
   }
 
@@ -595,21 +629,21 @@ class BluetoothHandler {
     if (Platform.OS === 'web') {
       return;
     }
-    
+
     // 监听设备断开事件
     device.onDisconnected((error, disconnectedDevice) => {
       console.log('=== 检测到蓝牙设备断开 ===');
       console.log('断开的设备:', disconnectedDevice?.name);
       console.log('错误信息:', error);
-      
+
       // 清除连接状态
       this.connectedDevice = null;
-      
+
       // 清除全局连接状态
       if (global.deviceConnection && global.deviceConnection.handler === this) {
         delete global.deviceConnection;
         console.log('全局连接状态已清除（设备物理断开）');
-        
+
         // 触发全局事件通知UI更新
         if (typeof global.onBluetoothDisconnected === 'function') {
           console.log('通知UI蓝牙已断开');
@@ -630,7 +664,7 @@ class BluetoothHandler {
         this.connectedDevice = null;
         return;
       }
-      
+
       // 如果有连接的设备，取消连接
       if (this.connectedDevice) {
         await this.connectedDevice.cancelConnection();
@@ -659,16 +693,16 @@ class BluetoothHandler {
    */
   bytesToBase64(bytes) {
     // 确保每个字节都在0-255范围内
-    const clampedBytes = bytes.map(byte => byte & 0xFF);
+    const clampedBytes = bytes.map((byte) => byte & 0xff);
     console.log('要编码的字节数组:', clampedBytes);
-    
+
     try {
       // 使用全局btoa函数进行编码
       let binary = '';
       for (let i = 0; i < clampedBytes.length; i++) {
         binary += String.fromCharCode(clampedBytes[i]);
       }
-      
+
       const base64 = btoa(binary);
       console.log('Base64编码成功:', base64);
       return base64;
@@ -685,26 +719,27 @@ class BluetoothHandler {
    * @returns {string} Base64编码字符串
    */
   simpleBytesToBase64(bytes) {
-    const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    const base64Chars =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     let result = '';
     let i = 0;
     const len = bytes.length;
-    
+
     while (i < len) {
       // 每次处理3个字节
-      const byte1 = bytes[i] & 0xFF;
-      const byte2 = i + 1 < len ? bytes[i + 1] & 0xFF : 0;
-      const byte3 = i + 2 < len ? bytes[i + 2] & 0xFF : 0;
-      
+      const byte1 = bytes[i] & 0xff;
+      const byte2 = i + 1 < len ? bytes[i + 1] & 0xff : 0;
+      const byte3 = i + 2 < len ? bytes[i + 2] & 0xff : 0;
+
       // 将3个字节编码为4个Base64字符
       const enc1 = byte1 >> 2;
       const enc2 = ((byte1 & 0x03) << 4) | (byte2 >> 4);
-      const enc3 = ((byte2 & 0x0F) << 2) | (byte3 >> 6);
-      const enc4 = byte3 & 0x3F;
-      
+      const enc3 = ((byte2 & 0x0f) << 2) | (byte3 >> 6);
+      const enc4 = byte3 & 0x3f;
+
       result += base64Chars[enc1];
       result += base64Chars[enc2];
-      
+
       // 根据剩余字节数添加填充
       const remaining = len - i;
       if (remaining >= 2) {
@@ -712,16 +747,16 @@ class BluetoothHandler {
       } else {
         result += '=';
       }
-      
+
       if (remaining >= 3) {
         result += base64Chars[enc4];
       } else {
         result += '=';
       }
-      
+
       i += 3;
     }
-    
+
     console.log('简单Base64编码成功:', result);
     return result;
   }

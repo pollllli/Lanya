@@ -4,7 +4,14 @@
  * 支持内存缓存机制，提高读取性能
  */
 
-import { saveData, getData, removeData, batchGetData, batchSaveData, clearAllData } from '../utils/StorageUtils';
+import {
+  saveData,
+  getData,
+  removeData,
+  batchGetData,
+  batchSaveData,
+  clearAllData,
+} from '../utils/StorageUtils';
 import { logError, handleAsyncError } from '../utils/ErrorHandler';
 
 /**
@@ -17,10 +24,10 @@ function parseCSVLine(line) {
   const result = [];
   let current = '';
   let inQuotes = false;
-  
+
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
-    
+
     // 处理引号（用于包含逗号的字段）
     if (char === '"') {
       inQuotes = !inQuotes;
@@ -32,7 +39,7 @@ function parseCSVLine(line) {
       current += char;
     }
   }
-  
+
   result.push(current);
   return result;
 }
@@ -46,12 +53,12 @@ class StorageService {
    * 内存缓存（私有静态成员）
    */
   static #cache = new Map();
-  
+
   /**
    * 缓存有效期（5分钟）
    */
   static #cacheTTL = 5 * 60 * 1000;
-  
+
   /**
    * 缓存时间戳映射
    */
@@ -107,16 +114,18 @@ class StorageService {
       // 先从缓存获取
       const cached = this.#getFromCache('devices');
       if (cached) return cached;
-      
+
       // 从持久化存储获取
       let devices = await getData('devices', []);
-      
+
       // 修复已存在的无效 id（NaN、字符串等）
-      const existingIds = devices.map(d => typeof d.id === 'number' && !isNaN(d.id) ? d.id : 0);
+      const existingIds = devices.map((d) =>
+        typeof d.id === 'number' && !isNaN(d.id) ? d.id : 0
+      );
       let maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0;
-      
+
       let needsSave = false;
-      devices = devices.map(device => {
+      devices = devices.map((device) => {
         if (typeof device.id !== 'number' || isNaN(device.id)) {
           maxId++;
           needsSave = true;
@@ -124,12 +133,12 @@ class StorageService {
         }
         return device;
       });
-      
+
       // 如果修复了数据，保存修复后的数据
       if (needsSave) {
         await saveData('devices', devices);
       }
-      
+
       // 更新缓存
       this.#setToCache('devices', devices);
       return devices;
@@ -165,22 +174,25 @@ class StorageService {
   static async addDevice(device) {
     try {
       const devices = await this.getDevices();
-      
+
       // 生成有效的数字id，过滤掉NaN或无效值
-      const existingIds = devices.map(d => typeof d.id === 'number' && !isNaN(d.id) ? d.id : 0);
+      const existingIds = devices.map((d) =>
+        typeof d.id === 'number' && !isNaN(d.id) ? d.id : 0
+      );
       const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0;
-      const newId = (device.id && typeof device.id === 'number' && !isNaN(device.id)) 
-        ? device.id 
-        : maxId + 1;
-      
+      const newId =
+        device.id && typeof device.id === 'number' && !isNaN(device.id)
+          ? device.id
+          : maxId + 1;
+
       // 创建新器件（自动生成ID和时间戳）
       const newDevice = {
         ...device,
         id: newId,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
-      
+
       devices.push(newDevice);
       await this.saveDevices(devices);
       return newDevice;
@@ -198,11 +210,11 @@ class StorageService {
   static async updateDevice(updatedDevice) {
     try {
       const devices = await this.getDevices();
-      const index = devices.findIndex(d => d.id === updatedDevice.id);
+      const index = devices.findIndex((d) => d.id === updatedDevice.id);
       if (index !== -1) {
         const updated = {
           ...updatedDevice,
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
         };
         devices[index] = updated;
         await this.saveDevices(devices);
@@ -223,7 +235,7 @@ class StorageService {
   static async deleteDevice(deviceId) {
     try {
       const devices = await this.getDevices();
-      const updatedDevices = devices.filter(d => d.id !== deviceId);
+      const updatedDevices = devices.filter((d) => d.id !== deviceId);
       await this.saveDevices(updatedDevices);
       return true;
     } catch (error) {
@@ -240,7 +252,7 @@ class StorageService {
   static async getDeviceById(deviceId) {
     try {
       const devices = await this.getDevices();
-      return devices.find(d => d.id === deviceId) || null;
+      return devices.find((d) => d.id === deviceId) || null;
     } catch (error) {
       logError('根据ID获取设备失败', error, 'StorageService.getDeviceById');
       return null;
@@ -255,11 +267,11 @@ class StorageService {
     try {
       const cached = this.#getFromCache('users');
       if (cached) return cached;
-      
+
       const users = await getData('users');
       if (users) {
         let needFix = false;
-        const fixedUsers = users.map(user => {
+        const fixedUsers = users.map((user) => {
           if (user.username === 'admin' && user.isAdmin !== true) {
             needFix = true;
             return { ...user, isAdmin: true };
@@ -270,19 +282,29 @@ class StorageService {
           }
           return user;
         });
-        
+
         if (needFix) {
           await this.saveUsers(fixedUsers);
           this.#setToCache('users', fixedUsers);
           return fixedUsers;
         }
-        
+
         this.#setToCache('users', users);
         return users;
       } else {
         const defaultUsers = [
-          { username: 'admin', password: 'admin', isAdmin: true, createdAt: new Date().toISOString() },
-          { username: 'user', password: 'user', isAdmin: false, createdAt: new Date().toISOString() }
+          {
+            username: 'admin',
+            password: 'admin',
+            isAdmin: true,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            username: 'user',
+            password: 'user',
+            isAdmin: false,
+            createdAt: new Date().toISOString(),
+          },
         ];
         await this.saveUsers(defaultUsers);
         return defaultUsers;
@@ -316,9 +338,13 @@ class StorageService {
   static async getUserByUsername(username) {
     try {
       const users = await this.getUsers();
-      return users.find(u => u.username === username) || null;
+      return users.find((u) => u.username === username) || null;
     } catch (error) {
-      logError('根据用户名获取用户失败', error, 'StorageService.getUserByUsername');
+      logError(
+        '根据用户名获取用户失败',
+        error,
+        'StorageService.getUserByUsername'
+      );
       return null;
     }
   }
@@ -332,7 +358,7 @@ class StorageService {
     try {
       const cached = this.#getFromCache('searchHistory');
       if (cached) return cached.slice(0, limit);
-      
+
       const history = await getData('searchHistory', []);
       const limitedHistory = history.slice(0, limit);
       this.#setToCache('searchHistory', limitedHistory);
@@ -354,15 +380,15 @@ class StorageService {
       if (!keyword || typeof keyword !== 'string' || !keyword.trim()) {
         return;
       }
-      
+
       const history = await this.getSearchHistory(100);
       const trimmedKeyword = keyword.trim();
-      
+
       // 移除重复项
-      const filteredHistory = history.filter(item => item !== trimmedKeyword);
+      const filteredHistory = history.filter((item) => item !== trimmedKeyword);
       // 添加到开头，保持最新的在前面
       const newHistory = [trimmedKeyword, ...filteredHistory].slice(0, 10);
-      
+
       await this.saveSearchHistory(newHistory);
     } catch (error) {
       logError('添加搜索历史失败', error, 'StorageService.addSearchHistory');
@@ -406,7 +432,7 @@ class StorageService {
     try {
       const cached = this.#getFromCache('formState');
       if (cached) return cached;
-      
+
       const formState = await getData('formState', {});
       this.#setToCache('formState', formState);
       return formState;
@@ -441,7 +467,7 @@ class StorageService {
       // 先从缓存获取
       const cachedData = {};
       const keysToFetch = [];
-      
+
       for (const key of keys) {
         const cached = this.#getFromCache(key);
         if (cached) {
@@ -450,7 +476,7 @@ class StorageService {
           keysToFetch.push(key);
         }
       }
-      
+
       // 从存储获取剩余的
       if (keysToFetch.length > 0) {
         const fetchedData = await batchGetData(keysToFetch);
@@ -462,7 +488,7 @@ class StorageService {
         }
         return { ...cachedData, ...fetchedData };
       }
-      
+
       return cachedData;
     } catch (error) {
       logError('批量获取数据失败', error, 'StorageService.batchGet');
@@ -512,7 +538,11 @@ class StorageService {
       await saveData('loggedInUser', user);
       this.#setToCache('loggedInUser', user);
     } catch (error) {
-      logError('保存登录用户信息失败', error, 'StorageService.saveLoggedInUser');
+      logError(
+        '保存登录用户信息失败',
+        error,
+        'StorageService.saveLoggedInUser'
+      );
       throw error;
     }
   }
@@ -524,17 +554,17 @@ class StorageService {
   static async getLoggedInUser() {
     try {
       let cached = this.#getFromCache('loggedInUser');
-      
+
       if (!cached) {
         cached = await getData('loggedInUser', null);
       }
-      
+
       if (!cached) return null;
-      
+
       // 修复用户权限（确保admin是管理员，user是普通用户）
       let needFix = false;
       let fixedUser = cached;
-      
+
       if (cached.username === 'admin' && cached.isAdmin !== true) {
         needFix = true;
         fixedUser = { ...cached, isAdmin: true };
@@ -542,12 +572,12 @@ class StorageService {
         needFix = true;
         fixedUser = { ...cached, isAdmin: false };
       }
-      
+
       if (needFix) {
         await this.saveLoggedInUser(fixedUser);
         return fixedUser;
       }
-      
+
       this.#setToCache('loggedInUser', cached);
       return cached;
     } catch (error) {
@@ -565,7 +595,11 @@ class StorageService {
       await removeData('loggedInUser');
       this.#clearCache('loggedInUser');
     } catch (error) {
-      logError('移除登录用户信息失败', error, 'StorageService.removeLoggedInUser');
+      logError(
+        '移除登录用户信息失败',
+        error,
+        'StorageService.removeLoggedInUser'
+      );
       throw error;
     }
   }
@@ -578,7 +612,7 @@ class StorageService {
     try {
       const cached = this.#getFromCache('boms');
       if (cached) return cached;
-      
+
       const boms = await getData('boms', []);
       this.#setToCache('boms', boms);
       return boms;
@@ -613,9 +647,9 @@ class StorageService {
       const boms = await this.getBOMs();
       const newBOM = {
         ...bom,
-        id: boms.length > 0 ? Math.max(...boms.map(b => b.id)) + 1 : 1,
+        id: boms.length > 0 ? Math.max(...boms.map((b) => b.id)) + 1 : 1,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
       boms.push(newBOM);
       await this.saveBOMs(boms);
@@ -634,11 +668,11 @@ class StorageService {
   static async updateBOM(updatedBOM) {
     try {
       const boms = await this.getBOMs();
-      const index = boms.findIndex(b => b.id === updatedBOM.id);
+      const index = boms.findIndex((b) => b.id === updatedBOM.id);
       if (index !== -1) {
         boms[index] = {
           ...updatedBOM,
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
         };
         await this.saveBOMs(boms);
         return true;
@@ -658,7 +692,7 @@ class StorageService {
   static async deleteBOM(bomId) {
     try {
       const boms = await this.getBOMs();
-      const updatedBoms = boms.filter(b => b.id !== bomId);
+      const updatedBoms = boms.filter((b) => b.id !== bomId);
       await this.saveBOMs(updatedBoms);
       return true;
     } catch (error) {
@@ -675,7 +709,7 @@ class StorageService {
   static async getBOMById(bomId) {
     try {
       const boms = await this.getBOMs();
-      return boms.find(b => b.id === bomId) || null;
+      return boms.find((b) => b.id === bomId) || null;
     } catch (error) {
       logError('根据ID获取BOM失败', error, 'StorageService.getBOMById');
       return null;
@@ -694,7 +728,7 @@ class StorageService {
         data,
         exportDate: new Date().toISOString(),
         version: '1.0.0',
-        appVersion: '1.0.0'
+        appVersion: '1.0.0',
       };
     } catch (error) {
       logError('导出数据失败', error, 'StorageService.exportAllData');
@@ -715,13 +749,13 @@ class StorageService {
       if (!backupData || !backupData.data) {
         throw new Error('无效的备份数据');
       }
-      
+
       // 验证备份数据版本
       const version = backupData.version || '1.0.0';
       if (version !== '1.0.0') {
         throw new Error('备份数据版本不兼容');
       }
-      
+
       // 批量保存数据
       await this.batchSet(backupData.data);
       return true;
@@ -745,100 +779,118 @@ class StorageService {
       const devices = await this.getDevices();
       const newDevices = [];
       const errors = [];
-      
+
       // 中文列名映射（支持多种列名）
       const columnMapping = {
-        '器件名称': 'name',
-        '名称': 'name',
-        '器件编号': 'id',
-        '编号': 'id',
-        '供应商编号': 'supplierId',
-        '封装': 'package',
-        '位号': 'position',
-        '备注': 'remark',
-        '值': 'value',
-        '数量': 'quantity',
-        '型号': 'model',
-        '功能': 'function',
-        '分类': 'category',
-        '类别': 'category',
-        '器件架': 'shelfId',
-        '货架': 'shelfId',
-        '制造商': 'manufacturer',
-        '供应商': 'supplier',
-        '价格': 'price',
-        '物理位置': 'location',
-        'datasheet': 'datasheet'
+        器件名称: 'name',
+        名称: 'name',
+        器件编号: 'id',
+        编号: 'id',
+        供应商编号: 'supplierId',
+        封装: 'package',
+        位号: 'position',
+        备注: 'remark',
+        值: 'value',
+        数量: 'quantity',
+        型号: 'model',
+        功能: 'function',
+        分类: 'category',
+        类别: 'category',
+        器件架: 'shelfId',
+        货架: 'shelfId',
+        制造商: 'manufacturer',
+        供应商: 'supplier',
+        价格: 'price',
+        物理位置: 'location',
+        datasheet: 'datasheet',
       };
-      
+
       // 解析CSV内容
       const lines = csvContent.split('\n');
-      const headers = parseCSVLine(lines[0]).map(header => header.trim());
-      
+      const headers = parseCSVLine(lines[0]).map((header) => header.trim());
+
       // 检查是否包含器件架列
-      const hasShelfColumn = headers.some(header => {
+      const hasShelfColumn = headers.some((header) => {
         const headerLower = header.toLowerCase();
-        return header.includes('器件架') || header.includes('货架') || header.includes('位置') ||
-               headerLower === 'shelf' || headerLower === 'shelfd' || headerLower === 'location';
+        return (
+          header.includes('器件架') ||
+          header.includes('货架') ||
+          header.includes('位置') ||
+          headerLower === 'shelf' ||
+          headerLower === 'shelfd' ||
+          headerLower === 'location'
+        );
       });
-      
+
       if (!hasShelfColumn) {
-        return { 
-          success: false, 
-          imported: 0, 
-          errors: ['导入失败：表格中必须包含器件架列（列名可以是：器件架、货架、位置）'], 
-          total: 0 
+        return {
+          success: false,
+          imported: 0,
+          errors: [
+            '导入失败：表格中必须包含器件架列（列名可以是：器件架、货架、位置）',
+          ],
+          total: 0,
         };
       }
-      
+
       // 逐行解析
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (!line) continue;  // 跳过空行
-        
+        if (!line) continue; // 跳过空行
+
         const values = parseCSVLine(line);
         const device = {};
-        
+
         // 映射列名到字段
         headers.forEach((header, index) => {
           let mappedField = header.toLowerCase();
-          
+
           // 查找中文列名映射
-          for (const [chineseName, englishName] of Object.entries(columnMapping)) {
-            if (header.includes(chineseName) || header.toLowerCase() === chineseName.toLowerCase()) {
+          for (const [chineseName, englishName] of Object.entries(
+            columnMapping
+          )) {
+            if (
+              header.includes(chineseName) ||
+              header.toLowerCase() === chineseName.toLowerCase()
+            ) {
               mappedField = englishName;
               break;
             }
           }
-          
+
           device[mappedField] = (values[index] || '').trim();
         });
-        
+
         // 验证必要字段（器件名称）
         if (!device.name && !device['器件名称']) {
-          errors.push(`第 ${i+1} 行: 器件名称不能为空`);
+          errors.push(`第 ${i + 1} 行: 器件名称不能为空`);
           continue;
         }
-        
+
         // 如果name为空但有中文名称，使用中文名称
         if (!device.name && device['器件名称']) {
           device.name = device['器件名称'];
         }
-        
+
         // 如果没有设置supplierId，但有id，将id也赋值给supplierId
         if (!device.supplierId && device.id) {
           device.supplierId = device.id;
         }
-        
+
         // 自动根据"值"字段填入对应的电气参数字段
         if (device.value) {
           const value = device.value.trim();
-          
+
           if (value.includes('Ω')) {
             device.resistance = value;
           } else if (value.includes('F') && !value.includes('H')) {
             device.capacitance = value;
-          } else if (value.includes('H') && (value.includes('mH') || value.includes('μH') || value.includes('nH'))) {
+          } else if (
+            value.includes('H') &&
+            (value.includes('mH') ||
+              value.includes('μH') ||
+              value.includes('nH'))
+          ) {
             device.inductance = value;
           } else if (value.includes('V')) {
             device.voltage = value;
@@ -850,43 +902,54 @@ class StorageService {
             device.frequency = value;
           }
         }
-        
+
         // 处理字段名兼容性（shelfid -> shelfId）
         if (device.shelfid) device.shelfId = device.shelfid;
-        
+
         // 验证器件架列数据不能为空
         if (!device.shelfId || !device.shelfId.trim()) {
-          errors.push(`第 ${i+1} 行: 器件架不能为空`);
+          errors.push(`第 ${i + 1} 行: 器件架不能为空`);
           continue;
         }
-        
+
         // 处理器件架值（支持 A/B/C/D 或 1/2/3/4）
         if (device.shelfId) {
           const shelfValue = device.shelfId.trim().toUpperCase();
           // 如果是 A/B/C/D，转换为对应的数字
-          const shelfMap = { 'A': '1', 'B': '2', 'C': '3', 'D': '4' };
+          const shelfMap = { A: '1', B: '2', C: '3', D: '4' };
           if (shelfMap[shelfValue]) {
             device.shelfId = shelfMap[shelfValue];
           } else if (!['1', '2', '3', '4'].includes(device.shelfId)) {
-            errors.push(`第 ${i+1} 行: 器件架值无效，只能是 A/B/C/D 或 1/2/3/4`);
+            errors.push(
+              `第 ${i + 1} 行: 器件架值无效，只能是 A/B/C/D 或 1/2/3/4`
+            );
             continue;
           }
         }
-        
+
         // 移除不需要的字段
         delete device.shelfid;
-        
+
         newDevices.push(device);
       }
-      
+
       // 批量添加新器件
       for (const device of newDevices) {
         await this.addDevice(device);
       }
-      
-      return { success: true, imported: newDevices.length, errors, total: newDevices.length + errors.length };
+
+      return {
+        success: true,
+        imported: newDevices.length,
+        errors,
+        total: newDevices.length + errors.length,
+      };
     } catch (error) {
-      logError('批量导入器件失败', error, 'StorageService.importDevicesFromCSV');
+      logError(
+        '批量导入器件失败',
+        error,
+        'StorageService.importDevicesFromCSV'
+      );
       throw error;
     }
   }
@@ -901,19 +964,24 @@ class StorageService {
       const devices = await this.getDevices();
       if (!keyword) return devices;
       const searchTerm = keyword.toLowerCase().trim();
-      
+
       if (!searchTerm) return devices;
-      
+
       // 多字段模糊搜索
-      return devices.filter(device => {
+      return devices.filter((device) => {
         return (
           (device.name && device.name.toLowerCase().includes(searchTerm)) ||
           (device.id && device.id.toString().includes(searchTerm)) ||
-          (device.function && device.function.toLowerCase().includes(searchTerm)) ||
-          (device.resistance && device.resistance.toLowerCase().includes(searchTerm)) ||
-          (device.voltage && device.voltage.toLowerCase().includes(searchTerm)) ||
-          (device.capacitance && device.capacitance.toLowerCase().includes(searchTerm)) ||
-          (device.inductance && device.inductance.toLowerCase().includes(searchTerm)) ||
+          (device.function &&
+            device.function.toLowerCase().includes(searchTerm)) ||
+          (device.resistance &&
+            device.resistance.toLowerCase().includes(searchTerm)) ||
+          (device.voltage &&
+            device.voltage.toLowerCase().includes(searchTerm)) ||
+          (device.capacitance &&
+            device.capacitance.toLowerCase().includes(searchTerm)) ||
+          (device.inductance &&
+            device.inductance.toLowerCase().includes(searchTerm)) ||
           (device.current && device.current.toLowerCase().includes(searchTerm))
         );
       });
@@ -931,18 +999,23 @@ class StorageService {
   static async filterDevices(filters) {
     try {
       const devices = await this.getDevices();
-      
-      return devices.filter(device => {
+
+      return devices.filter((device) => {
         for (const [key, value] of Object.entries(filters)) {
           // 跳过空值条件
           if (value === null || value === undefined || value === '') continue;
-          
+
           const deviceValue = device[key];
           if (!deviceValue) return false;
-          
+
           // 字符串模糊匹配，数字精确匹配
           if (typeof value === 'string') {
-            if (!deviceValue.toString().toLowerCase().includes(value.toLowerCase())) {
+            if (
+              !deviceValue
+                .toString()
+                .toLowerCase()
+                .includes(value.toLowerCase())
+            ) {
               return false;
             }
           } else if (typeof value === 'number') {

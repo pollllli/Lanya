@@ -10,7 +10,7 @@ import {
   Platform,
   PermissionsAndroid,
   ScrollView,
-  Modal
+  Modal,
 } from 'react-native';
 import BluetoothHandler from '../services/BluetoothHandler';
 import SerialPortHandler from '../services/SerialPortHandler';
@@ -30,7 +30,7 @@ const ConnectionScreen = ({ navigation }) => {
     baudRate: 9600,
     dataBits: 8,
     stopBits: 1,
-    parity: 0
+    parity: 0,
   });
   const [showSerialParamsModal, setShowSerialParamsModal] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('未连接');
@@ -143,24 +143,24 @@ const ConnectionScreen = ({ navigation }) => {
 
       // 初始化串口连接
       const result = await serialHandler.initialize();
-      
+
       // 获取端口名称
-      const port = serialPorts.find(p => p.id === portPath);
+      const port = serialPorts.find((p) => p.id === portPath);
       const deviceInfo = {
         id: portPath,
-        name: port ? port.name : portPath
+        name: port ? port.name : portPath,
       };
 
       setConnectedDevice(deviceInfo);
       setIsConnected(true);
       setConnectionStatus(`已连接到: ${deviceInfo.name}`);
       Alert.alert('成功', `已连接到串口设备: ${deviceInfo.name}`);
-      
+
       // 保存连接状态到全局
       global.deviceConnection = {
         type: 'serial',
         device: deviceInfo,
-        handler: serialHandler
+        handler: serialHandler,
       };
 
       // 添加数据监听器
@@ -168,7 +168,6 @@ const ConnectionScreen = ({ navigation }) => {
         console.log('接收到串口数据:', data);
         // 可以在这里处理接收到的数据，例如更新UI
       });
-
     } catch (error) {
       console.error('连接串口设备失败:', error);
       Alert.alert('错误', `连接串口设备失败: ${error.message}`);
@@ -190,18 +189,18 @@ const ConnectionScreen = ({ navigation }) => {
 
   // 波特率选项
   const baudRateOptions = [9600, 19200, 38400, 57600, 115200];
-  
+
   // 数据位选项
   const dataBitsOptions = [5, 6, 7, 8];
-  
+
   // 停止位选项
   const stopBitsOptions = [1, 2];
-  
+
   // 校验位选项
   const parityOptions = [
     { value: 0, label: '无校验' },
     { value: 1, label: '奇校验' },
-    { value: 2, label: '偶校验' }
+    { value: 2, label: '偶校验' },
   ];
 
   // 请求蓝牙权限
@@ -209,42 +208,49 @@ const ConnectionScreen = ({ navigation }) => {
     if (Platform.OS === 'android') {
       try {
         // 1. 请求位置权限
-        const locationGranted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: '位置权限',
-            message: '应用需要位置权限才能扫描蓝牙设备',
-            buttonNeutral: '稍后询问',
-            buttonNegative: '拒绝',
-            buttonPositive: '允许',
-          }
-        ) === PermissionsAndroid.RESULTS.GRANTED;
+        const locationGranted =
+          (await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+            {
+              title: '位置权限',
+              message: '应用需要位置权限才能扫描蓝牙设备',
+              buttonNeutral: '稍后询问',
+              buttonNegative: '拒绝',
+              buttonPositive: '允许',
+            }
+          )) === PermissionsAndroid.RESULTS.GRANTED;
 
         // 2. 请求蓝牙扫描权限
-        const scanGranted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-          {
-            title: '蓝牙扫描权限',
-            message: '应用需要蓝牙扫描权限才能发现附近的蓝牙设备',
-            buttonNeutral: '稍后询问',
-            buttonNegative: '拒绝',
-            buttonPositive: '允许',
-          }
-        ) === PermissionsAndroid.RESULTS.GRANTED;
+        const scanGranted =
+          (await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+            {
+              title: '蓝牙扫描权限',
+              message: '应用需要蓝牙扫描权限才能发现附近的蓝牙设备',
+              buttonNeutral: '稍后询问',
+              buttonNegative: '拒绝',
+              buttonPositive: '允许',
+            }
+          )) === PermissionsAndroid.RESULTS.GRANTED;
 
         // 3. 请求蓝牙连接权限
-        const connectGranted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-          {
-            title: '蓝牙连接权限',
-            message: '应用需要蓝牙连接权限才能连接到蓝牙设备',
-            buttonNeutral: '稍后询问',
-            buttonNegative: '拒绝',
-            buttonPositive: '允许',
-          }
-        ) === PermissionsAndroid.RESULTS.GRANTED;
+        const connectGranted =
+          (await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+            {
+              title: '蓝牙连接权限',
+              message: '应用需要蓝牙连接权限才能连接到蓝牙设备',
+              buttonNeutral: '稍后询问',
+              buttonNegative: '拒绝',
+              buttonPositive: '允许',
+            }
+          )) === PermissionsAndroid.RESULTS.GRANTED;
 
-        console.log('蓝牙权限请求结果:', { locationGranted, scanGranted, connectGranted });
+        console.log('蓝牙权限请求结果:', {
+          locationGranted,
+          scanGranted,
+          connectGranted,
+        });
 
         return locationGranted && scanGranted && connectGranted;
       } catch (error) {
@@ -295,16 +301,16 @@ const ConnectionScreen = ({ navigation }) => {
 
     try {
       await bluetoothHandler.connectToDevice(deviceId);
-      const device = availableDevices.find(d => d.id === deviceId);
+      const device = availableDevices.find((d) => d.id === deviceId);
       setConnectedDevice(device);
       setIsConnected(true);
       Alert.alert('成功', `已连接到设备: ${device.name}`);
-      
+
       // 保存连接状态到全局
       global.deviceConnection = {
         type: 'bluetooth',
         device: device,
-        handler: bluetoothHandler
+        handler: bluetoothHandler,
       };
     } catch (error) {
       console.error('连接蓝牙设备失败:', error);
@@ -355,28 +361,36 @@ const ConnectionScreen = ({ navigation }) => {
         <TouchableOpacity
           style={[
             styles.communicationTypeButton,
-            communicationType === 'bluetooth' && styles.communicationTypeButtonActive
+            communicationType === 'bluetooth' &&
+              styles.communicationTypeButtonActive,
           ]}
           onPress={() => setCommunicationType('bluetooth')}
         >
-          <Text style={[
-            styles.communicationTypeButtonText,
-            communicationType === 'bluetooth' && styles.communicationTypeButtonTextActive
-          ]}>
+          <Text
+            style={[
+              styles.communicationTypeButtonText,
+              communicationType === 'bluetooth' &&
+                styles.communicationTypeButtonTextActive,
+            ]}
+          >
             蓝牙
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
             styles.communicationTypeButton,
-            communicationType === 'serial' && styles.communicationTypeButtonActive
+            communicationType === 'serial' &&
+              styles.communicationTypeButtonActive,
           ]}
           onPress={() => setCommunicationType('serial')}
         >
-          <Text style={[
-            styles.communicationTypeButtonText,
-            communicationType === 'serial' && styles.communicationTypeButtonTextActive
-          ]}>
+          <Text
+            style={[
+              styles.communicationTypeButtonText,
+              communicationType === 'serial' &&
+                styles.communicationTypeButtonTextActive,
+            ]}
+          >
             串口
           </Text>
         </TouchableOpacity>
@@ -385,10 +399,9 @@ const ConnectionScreen = ({ navigation }) => {
       {/* 连接状态 */}
       <View style={styles.connectionStatus}>
         <Text style={styles.statusText}>
-          {isConnected 
-            ? `已连接: ${connectedDevice?.name || '设备'}` 
-            : '未连接设备'
-          }
+          {isConnected
+            ? `已连接: ${connectedDevice?.name || '设备'}`
+            : '未连接设备'}
         </Text>
         {isConnected && (
           <TouchableOpacity
@@ -454,15 +467,19 @@ const ConnectionScreen = ({ navigation }) => {
             </TouchableOpacity>
             <View style={styles.paramsInfo}>
               <Text style={styles.paramsInfoText}>
-                波特率: {serialParams.baudRate} | 数据位: {serialParams.dataBits} | 
-                停止位: {serialParams.stopBits} | 校验: {parityOptions[serialParams.parity].label}
+                波特率: {serialParams.baudRate} | 数据位:{' '}
+                {serialParams.dataBits} | 停止位: {serialParams.stopBits} |
+                校验: {parityOptions[serialParams.parity].label}
               </Text>
             </View>
           </View>
 
           {/* 扫描串口设备 */}
           <TouchableOpacity
-            style={[styles.scanButton, isScanningSerial && styles.scanButtonDisabled]}
+            style={[
+              styles.scanButton,
+              isScanningSerial && styles.scanButtonDisabled,
+            ]}
             onPress={scanForSerialPorts}
             disabled={isScanningSerial}
           >
@@ -496,7 +513,7 @@ const ConnectionScreen = ({ navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>串口参数设置</Text>
-            
+
             {/* 波特率设置 */}
             <View style={styles.modalSection}>
               <Text style={styles.modalLabel}>波特率</Text>
@@ -506,14 +523,20 @@ const ConnectionScreen = ({ navigation }) => {
                     key={rate}
                     style={[
                       styles.optionButton,
-                      serialParams.baudRate === rate && styles.optionButtonActive
+                      serialParams.baudRate === rate &&
+                        styles.optionButtonActive,
                     ]}
-                    onPress={() => setSerialParams({ ...serialParams, baudRate: rate })}
+                    onPress={() =>
+                      setSerialParams({ ...serialParams, baudRate: rate })
+                    }
                   >
-                    <Text style={[
-                      styles.optionButtonText,
-                      serialParams.baudRate === rate && styles.optionButtonTextActive
-                    ]}>
+                    <Text
+                      style={[
+                        styles.optionButtonText,
+                        serialParams.baudRate === rate &&
+                          styles.optionButtonTextActive,
+                      ]}
+                    >
                       {rate}
                     </Text>
                   </TouchableOpacity>
@@ -530,14 +553,20 @@ const ConnectionScreen = ({ navigation }) => {
                     key={bits}
                     style={[
                       styles.optionButton,
-                      serialParams.dataBits === bits && styles.optionButtonActive
+                      serialParams.dataBits === bits &&
+                        styles.optionButtonActive,
                     ]}
-                    onPress={() => setSerialParams({ ...serialParams, dataBits: bits })}
+                    onPress={() =>
+                      setSerialParams({ ...serialParams, dataBits: bits })
+                    }
                   >
-                    <Text style={[
-                      styles.optionButtonText,
-                      serialParams.dataBits === bits && styles.optionButtonTextActive
-                    ]}>
+                    <Text
+                      style={[
+                        styles.optionButtonText,
+                        serialParams.dataBits === bits &&
+                          styles.optionButtonTextActive,
+                      ]}
+                    >
                       {bits}
                     </Text>
                   </TouchableOpacity>
@@ -554,14 +583,20 @@ const ConnectionScreen = ({ navigation }) => {
                     key={bits}
                     style={[
                       styles.optionButton,
-                      serialParams.stopBits === bits && styles.optionButtonActive
+                      serialParams.stopBits === bits &&
+                        styles.optionButtonActive,
                     ]}
-                    onPress={() => setSerialParams({ ...serialParams, stopBits: bits })}
+                    onPress={() =>
+                      setSerialParams({ ...serialParams, stopBits: bits })
+                    }
                   >
-                    <Text style={[
-                      styles.optionButtonText,
-                      serialParams.stopBits === bits && styles.optionButtonTextActive
-                    ]}>
+                    <Text
+                      style={[
+                        styles.optionButtonText,
+                        serialParams.stopBits === bits &&
+                          styles.optionButtonTextActive,
+                      ]}
+                    >
                       {bits}
                     </Text>
                   </TouchableOpacity>
@@ -578,14 +613,20 @@ const ConnectionScreen = ({ navigation }) => {
                     key={option.value}
                     style={[
                       styles.optionButton,
-                      serialParams.parity === option.value && styles.optionButtonActive
+                      serialParams.parity === option.value &&
+                        styles.optionButtonActive,
                     ]}
-                    onPress={() => setSerialParams({ ...serialParams, parity: option.value })}
+                    onPress={() =>
+                      setSerialParams({ ...serialParams, parity: option.value })
+                    }
                   >
-                    <Text style={[
-                      styles.optionButtonText,
-                      serialParams.parity === option.value && styles.optionButtonTextActive
-                    ]}>
+                    <Text
+                      style={[
+                        styles.optionButtonText,
+                        serialParams.parity === option.value &&
+                          styles.optionButtonTextActive,
+                      ]}
+                    >
                       {option.label}
                     </Text>
                   </TouchableOpacity>
@@ -780,7 +821,7 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
   },
-  
+
   // Modal相关样式
   modalOverlay: {
     flex: 1,

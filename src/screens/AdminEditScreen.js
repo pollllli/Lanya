@@ -125,7 +125,8 @@ const AdminEditScreen = ({ navigation, route }) => {
       const csvContent = XLSX.utils.sheet_to_csv(worksheet);
 
       // 使用新的批量导入方法
-      const importResult = await StorageService.importDevicesFromCSV(csvContent);
+      const importResult =
+        await StorageService.importDevicesFromCSV(csvContent);
 
       if (importResult.success) {
         let message = `成功导入 ${importResult.imported} 个器件`;
@@ -138,7 +139,12 @@ const AdminEditScreen = ({ navigation, route }) => {
         Alert.alert('导入结果', message);
         navigation.goBack();
       } else {
-        Alert.alert('错误', importResult.errors && importResult.errors.length > 0 ? importResult.errors.join('\n') : '导入失败，请检查文件格式');
+        Alert.alert(
+          '错误',
+          importResult.errors && importResult.errors.length > 0
+            ? importResult.errors.join('\n')
+            : '导入失败，请检查文件格式'
+        );
       }
     } catch (error) {
       logError('导入失败', error, 'AdminEditScreen.handleImport');
@@ -177,23 +183,23 @@ const AdminEditScreen = ({ navigation, route }) => {
 
     if (
       state.capacitance.trim() &&
-      !/^\d+(\.\d+)?[pµnm]?F$/.test(state.capacitance.trim())
+      !/^\d+(\.\d+)?[pµunm]?F$/.test(state.capacitance.trim())
     ) {
-      errors.capacitance = '电容格式不正确，例如：10μF, 1nF';
+      errors.capacitance = '电容格式不正确，例如：10μF, 1nF, 10uF';
     }
 
     if (
       state.inductance.trim() &&
-      !/^\d+(\.\d+)?[nµm]?H$/.test(state.inductance.trim())
+      !/^\d+(\.\d+)?[nµum]?H$/.test(state.inductance.trim())
     ) {
-      errors.inductance = '电感格式不正确，例如：10mH, 1μH';
+      errors.inductance = '电感格式不正确，例如：10mH, 1μH, 10uH';
     }
 
     if (
       state.current.trim() &&
-      !/^\d+(\.\d+)?[mµ]?[Aa]$/.test(state.current.trim())
+      !/^\d+(\.\d+)?[mµu]?[Aa]$/.test(state.current.trim())
     ) {
-      errors.current = '电流格式不正确，例如：1A, 500mA';
+      errors.current = '电流格式不正确，例如：1A, 500mA, 500uA';
     }
 
     if (
@@ -621,19 +627,19 @@ const AdminEditScreen = ({ navigation, route }) => {
               </View>
 
               <View style={[styles.formGroup, styles.halfWidth]}>
-              <Text style={styles.label}>数量</Text>
-              <TextInput
-                style={styles.input}
-                value={state.quantity}
-                onChangeText={(text) =>
-                  dispatch({
-                    type: 'SET_FIELD',
-                    payload: { field: 'quantity', value: text },
-                  })
-                }
-                placeholder="请输入数量"
-              />
-            </View>
+                <Text style={styles.label}>数量</Text>
+                <TextInput
+                  style={styles.input}
+                  value={state.quantity}
+                  onChangeText={(text) =>
+                    dispatch({
+                      type: 'SET_FIELD',
+                      payload: { field: 'quantity', value: text },
+                    })
+                  }
+                  placeholder="请输入数量"
+                />
+              </View>
             </View>
 
             <View style={styles.formGroup}>

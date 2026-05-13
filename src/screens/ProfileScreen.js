@@ -15,8 +15,10 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import StorageService from '../services/StorageService';
 import { logError, formatErrorMessage } from '../utils/ErrorHandler';
+import { useUser } from '../context/UserContext';
 
 const ProfileScreen = ({ navigation, route }) => {
+  const { user, logout, updateUser } = useUser();
   const [userInfo, setUserInfo] = useState({
     username: 'user',
     role: '普通用户',
@@ -37,53 +39,13 @@ const ProfileScreen = ({ navigation, route }) => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // 从路由参数中获取用户信息
-    console.log('ProfileScreen route.params:', route.params);
-    if (route.params) {
-      const { username, isAdmin } = route.params;
-      console.log('ProfileScreen received:', { username, isAdmin });
+    if (user) {
       setUserInfo({
-        username: username || 'user',
-        role: isAdmin ? '管理员' : '普通用户',
+        username: user.username || 'user',
+        role: user.isAdmin ? '管理员' : '普通用户',
       });
-    } else {
-      // 尝试从 navigation.getState() 中获取
-      const state = navigation.getState();
-      console.log('ProfileScreen navigation state:', state);
-      if (state.routes[0].params) {
-        const { username, isAdmin } = state.routes[0].params;
-        console.log('ProfileScreen from navigation state:', {
-          username,
-          isAdmin,
-        });
-        setUserInfo({
-          username: username || (isAdmin ? 'admin' : 'user'),
-          role: isAdmin ? '管理员' : '普通用户',
-        });
-      } else {
-        // 直接从存储中获取登录用户信息
-        const getLoggedInUserInfo = async () => {
-          try {
-            const user = await StorageService.getLoggedInUser();
-            if (user) {
-              console.log('ProfileScreen from storage:', user);
-              setUserInfo({
-                username: user.username || 'user',
-                role: user.isAdmin ? '管理员' : '普通用户',
-              });
-            }
-          } catch (error) {
-            logError(
-              '获取登录用户信息失败',
-              error,
-              'ProfileScreen.getLoggedInUserInfo'
-            );
-          }
-        };
-        getLoggedInUserInfo();
-      }
     }
-  }, [route.params, navigation]);
+  }, [user]);
 
   const handleLogout = async () => {
     Alert.alert('确认退出', '确定要退出登录吗？', [
@@ -91,26 +53,27 @@ const ProfileScreen = ({ navigation, route }) => {
       {
         text: '确定',
         onPress: async () => {
-          // 清除登录状态
-          await StorageService.removeLoggedInUser();
-          // 导航到登录页面
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Login' }],
-          });
+          try {
+            await logout();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Login' }],
+            });
+          } catch (error) {
+            logError('退出登录失败', error, 'ProfileScreen.handleLogout');
+            Alert.alert('错误', '退出登录失败，请重试');
+          }
         },
       },
     ]);
   };
 
   const handleChangePassword = () => {
-    // 打开修改密码模态框
     setShowChangePasswordModal(true);
   };
 
   // 处理密码修改
   const handlePasswordSubmit = async () => {
-    // 验证输入
     if (
       !currentPassword.trim() ||
       !newPassword.trim() ||
@@ -131,12 +94,10 @@ const ProfileScreen = ({ navigation, route }) => {
     }
 
     try {
-      // 获取用户列表
       const users = await StorageService.getUsers();
 
-      // 检查当前密码是否正确
       const currentUser = users.find(
-        (user) => user.username === userInfo.username
+        (userItem) => userItem.username === userInfo.username
       );
 
       if (!currentUser) {
@@ -144,31 +105,26 @@ const ProfileScreen = ({ navigation, route }) => {
         return;
       }
 
-      // 验证当前密码
       if (currentPassword !== currentUser.password) {
         setError('当前密码错误');
         return;
       }
 
-      // 更新用户密码
-      const updatedUsers = users.map((user) =>
-        user.username === userInfo.username
-          ? { ...user, password: newPassword }
-          : user
+      const updatedUsers = users.map((userItem) =>
+        userItem.username === userInfo.username
+          ? { ...userItem, password: newPassword }
+          : userItem
       );
       await StorageService.saveUsers(updatedUsers);
 
-      // 更新登录用户信息
       const updatedUser = { ...currentUser, password: newPassword };
-      await StorageService.saveLoggedInUser(updatedUser);
+      await updateUser(updatedUser);
 
-      // 密码修改成功
       Alert.alert('成功', '密码修改成功', [
         {
           text: '确定',
           onPress: () => {
             setShowChangePasswordModal(false);
-            // 重置表单
             setCurrentPassword('');
             setNewPassword('');
             setConfirmPassword('');
@@ -185,7 +141,6 @@ const ProfileScreen = ({ navigation, route }) => {
   // 关闭修改密码模态框
   const handleCloseModal = () => {
     setShowChangePasswordModal(false);
-    // 重置表单
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
@@ -248,7 +203,8 @@ const ProfileScreen = ({ navigation, route }) => {
             Alert.alert('成功', '数据恢复成功！\n\n应用将重启以加载新数据。', [
               {
                 text: '确定',
-                onPress: () => {
+                onPress: async () => {
+                  await logout();
                   navigation.reset({
                     index: 0,
                     routes: [{ name: 'Login' }],

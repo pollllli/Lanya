@@ -8,7 +8,7 @@
  * @param {Array} searchHistory - 搜索历史数组
  * @param {number} limit - 建议数量限制
  * @returns {Array} 搜索建议数组
- * 注：普通搜索框只搜索器件名称和供应商编号
+ * 注：普通搜索框搜索器件名称和供应商编号
  */
 export const generateSearchSuggestions = (
   query,
@@ -23,14 +23,23 @@ export const generateSearchSuggestions = (
   const lowerQuery = query.toLowerCase();
   const suggestions = [];
 
-  // 从设备数据中生成建议（只基于名称）
+  // 从设备数据中生成建议（名称和供应商编号）
   devices.forEach((device) => {
+    // 搜索名称
     if (
       device.name &&
       device.name.toLowerCase().includes(lowerQuery) &&
       !suggestions.includes(device.name)
     ) {
       suggestions.push(device.name);
+    }
+    // 搜索供应商编号
+    if (
+      device.supplierId &&
+      device.supplierId.toLowerCase().includes(lowerQuery) &&
+      !suggestions.includes(device.supplierId)
+    ) {
+      suggestions.push(device.supplierId);
     }
   });
 
@@ -54,7 +63,7 @@ export const generateSearchSuggestions = (
  * @param {string} searchQuery - 搜索查询字符串
  * @param {string} selectedShelf - 选中的器件架ID
  * @returns {Array} 过滤后的设备数组
- * 注：普通搜索框只搜索器件名称和供应商编号
+ * 注：普通搜索框搜索器件名称和供应商编号
  */
 export const filterDevices = (devices, searchQuery, selectedShelf) => {
   let filtered = devices;
@@ -64,13 +73,13 @@ export const filterDevices = (devices, searchQuery, selectedShelf) => {
     filtered = filtered.filter((device) => device.shelfId === selectedShelf);
   }
 
-  // 然后根据搜索查询筛选（只搜索器件名称和供应商编号）
+  // 然后根据搜索查询筛选（搜索器件名称和供应商编号）
   if (searchQuery && searchQuery.trim() !== '') {
     const query = searchQuery.toLowerCase();
     filtered = filtered.filter((device) => {
       return (
         (device.name && device.name.toLowerCase().includes(query)) ||
-        (device.id && device.id.toString().toLowerCase().includes(query))
+        (device.supplierId && device.supplierId.toLowerCase().includes(query))
       );
     });
   }

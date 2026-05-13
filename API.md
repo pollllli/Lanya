@@ -24,21 +24,21 @@ class CommandBuilder {
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
-| data | Array<number> | 要计算校验的数据数组 |
+| 参数名 | 类型          | 说明                 |
+| ------ | ------------- | -------------------- |
+| data   | Array<number> | 要计算校验的数据数组 |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型   | 说明                       |
+| ------ | -------------------------- |
 | number | CRC-8/MAXIM 校验值 (0-255) |
 
 **示例**：
 
 ```javascript
 const builder = new CommandBuilder();
-const data = [0x55, 0xAA, 0x01, 0x02, 0x00, 0x01];
+const data = [0x55, 0xaa, 0x01, 0x02, 0x00, 0x01];
 const crc = builder.calculateCRC8(data);
 // crc = 0xD5
 ```
@@ -51,15 +51,15 @@ const crc = builder.calculateCRC8(data);
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
-| cmd | number | 命令字 (0-255) |
-| data | Array<number> | 数据数组（每个元素为 uint16_t） |
+| 参数名 | 类型          | 说明                            |
+| ------ | ------------- | ------------------------------- |
+| cmd    | number        | 命令字 (0-255)                  |
+| data   | Array<number> | 数据数组（每个元素为 uint16_t） |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明              |
+| ------------- | ----------------- |
 | Array<number> | 完整的7字节命令帧 |
 
 **示例**：
@@ -78,14 +78,14 @@ const frame = builder.buildCommandFrame(0x01, [1]);
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名  | 类型   | 说明         |
+| ------- | ------ | ------------ |
 | lightId | number | 灯ID (1-255) |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明         |
+| ------------- | ------------ |
 | Array<number> | 点亮灯命令帧 |
 
 **示例**：
@@ -104,14 +104,14 @@ const frame = builder.buildLightOnCommand(5);
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名  | 类型   | 说明         |
+| ------- | ------ | ------------ |
 | lightId | number | 灯ID (1-255) |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明         |
+| ------------- | ------------ |
 | Array<number> | 熄灭灯命令帧 |
 
 **示例**：
@@ -130,21 +130,21 @@ const frame = builder.buildLightOffCommand(5);
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
-| state | boolean | true=点亮所有灯, false=熄灭所有灯 |
+| 参数名 | 类型    | 说明                              |
+| ------ | ------- | --------------------------------- |
+| state  | boolean | true=点亮所有灯, false=熄灭所有灯 |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明             |
+| ------------- | ---------------- |
 | Array<number> | 控制所有灯命令帧 |
 
 **示例**：
 
 ```javascript
 const builder = new CommandBuilder();
-const frame1 = builder.buildControlAllLightsCommand(true);  // 点亮所有
+const frame1 = builder.buildControlAllLightsCommand(true); // 点亮所有
 const frame2 = builder.buildControlAllLightsCommand(false); // 熄灭所有
 ```
 
@@ -158,8 +158,8 @@ const frame2 = builder.buildControlAllLightsCommand(false); // 熄灭所有
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明       |
+| ------------- | ---------- |
 | Array<number> | 心跳命令帧 |
 
 **示例**：
@@ -178,32 +178,34 @@ const frame = builder.buildHeartbeatCommand();
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
-| data | Array<number> | 响应帧数据 |
+| 参数名 | 类型          | 说明       |
+| ------ | ------------- | ---------- |
+| data   | Array<number> | 响应帧数据 |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型   | 说明             |
+| ------ | ---------------- |
 | Object | 解析后的响应对象 |
 
 **返回对象结构**：
 
-| 字段 | 类型 | 说明 |
-|-----|-----|-----|
-| cmd | number | 原始命令字 (0-3) |
-| responseCmd | number | 响应命令字 (0x80-0x83) |
-| data | Array<number> | 响应数据 |
-| dataCount | number | 数据个数 |
-| success | boolean | 是否成功 |
-| timestamp | string | 时间戳 |
+| 字段        | 类型          | 说明                   |
+| ----------- | ------------- | ---------------------- |
+| cmd         | number        | 原始命令字 (0-3)       |
+| responseCmd | number        | 响应命令字 (0x80-0x83) |
+| data        | Array<number> | 响应数据               |
+| dataCount   | number        | 数据个数               |
+| success     | boolean       | 是否成功               |
+| timestamp   | string        | 时间戳                 |
 
 **示例**：
 
 ```javascript
 const builder = new CommandBuilder();
-const response = builder.parseResponseFrame([0x55, 0xAA, 0x81, 0x02, 0x00, 0x01, 0xFC]);
+const response = builder.parseResponseFrame([
+  0x55, 0xaa, 0x81, 0x02, 0x00, 0x01, 0xfc,
+]);
 // response = { cmd: 1, responseCmd: 0x81, data: [1], dataCount: 1, success: true, timestamp: "..." }
 ```
 
@@ -215,21 +217,21 @@ const response = builder.parseResponseFrame([0x55, 0xAA, 0x81, 0x02, 0x00, 0x01,
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
-| frame | Array<number> | 命令帧 |
+| 参数名 | 类型          | 说明   |
+| ------ | ------------- | ------ |
+| frame  | Array<number> | 命令帧 |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型   | 说明           |
+| ------ | -------------- |
 | string | 十六进制字符串 |
 
 **示例**：
 
 ```javascript
 const builder = new CommandBuilder();
-const frame = [0x55, 0xAA, 0x01, 0x02, 0x00, 0x01, 0xD5];
+const frame = [0x55, 0xaa, 0x01, 0x02, 0x00, 0x01, 0xd5];
 const hex = builder.frameToHex(frame);
 // hex = "55 aa 01 02 00 01 d5"
 ```
@@ -242,21 +244,21 @@ const hex = builder.frameToHex(frame);
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名    | 类型   | 说明           |
+| --------- | ------ | -------------- |
 | hexString | string | 十六进制字符串 |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明   |
+| ------------- | ------ |
 | Array<number> | 命令帧 |
 
 **示例**：
 
 ```javascript
 const builder = new CommandBuilder();
-const frame = builder.hexToFrame("55 aa 01 02 00 01 d5");
+const frame = builder.hexToFrame('55 aa 01 02 00 01 d5');
 // frame = [0x55, 0xAA, 0x01, 0x02, 0x00, 0x01, 0xD5]
 ```
 
@@ -268,21 +270,21 @@ const frame = builder.hexToFrame("55 aa 01 02 00 01 d5");
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
-| frame | Array<number> | 命令帧 |
+| 参数名 | 类型          | 说明   |
+| ------ | ------------- | ------ |
+| frame  | Array<number> | 命令帧 |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型    | 说明     |
+| ------- | -------- |
 | boolean | 是否有效 |
 
 **示例**：
 
 ```javascript
 const builder = new CommandBuilder();
-const frame = [0x55, 0xAA, 0x01, 0x02, 0x00, 0x01, 0xD5];
+const frame = [0x55, 0xaa, 0x01, 0x02, 0x00, 0x01, 0xd5];
 const isValid = builder.validateFrame(frame);
 // isValid = true
 ```
@@ -297,18 +299,18 @@ const isValid = builder.validateFrame(frame);
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型   | 说明         |
+| ------ | ------------ |
 | Object | 命令列表对象 |
 
 **返回对象结构**：
 
-| 字段 | 类型 | 说明 |
-|-----|-----|-----|
-| HEARTBEAT | number | 0x00 |
-| LIGHT_ON | number | 0x01 |
-| LIGHT_OFF | number | 0x02 |
-| CONTROL_ALL | number | 0x03 |
+| 字段         | 类型   | 说明         |
+| ------------ | ------ | ------------ |
+| HEARTBEAT    | number | 0x00         |
+| LIGHT_ON     | number | 0x01         |
+| LIGHT_OFF    | number | 0x02         |
+| CONTROL_ALL  | number | 0x03         |
 | descriptions | Object | 命令描述对象 |
 
 **示例**：
@@ -341,8 +343,8 @@ class BluetoothHandler {
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明       |
+| ------------- | ---------- |
 | Promise<void> | 初始化结果 |
 
 **示例**：
@@ -360,8 +362,8 @@ await handler.initialize();
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名   | 类型     | 说明         |
+| -------- | -------- | ------------ |
 | callback | function | 扫描回调函数 |
 
 **返回值**：无
@@ -400,14 +402,14 @@ handler.stopScanning();
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名   | 类型   | 说明   |
+| -------- | ------ | ------ |
 | deviceId | string | 设备ID |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型            | 说明     |
+| --------------- | -------- |
 | Promise<Object> | 连接结果 |
 
 **示例**：
@@ -428,8 +430,8 @@ const result = await handler.connectToDevice('3C:AB:72:38:11:CF');
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明     |
+| ------------- | -------- |
 | Promise<void> | 断开结果 |
 
 **示例**：
@@ -447,22 +449,22 @@ await handler.disconnect();
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名  | 类型   | 说明     |
+| ------- | ------ | -------- |
 | command | Object | 命令对象 |
 
 **命令对象结构**：
 
-| 字段 | 类型 | 说明 |
-|-----|-----|-----|
-| type | string | 命令类型 ('heartbeat', 'lightOn', 'lightOff', 'controlAll') |
-| lightId | number | 灯ID（仅 type='lightOn'/'lightOff' 时需要） |
-| state | boolean | 状态（仅 type='controlAll' 时需要） |
+| 字段    | 类型    | 说明                                                        |
+| ------- | ------- | ----------------------------------------------------------- |
+| type    | string  | 命令类型 ('heartbeat', 'lightOn', 'lightOff', 'controlAll') |
+| lightId | number  | 灯ID（仅 type='lightOn'/'lightOff' 时需要）                 |
+| state   | boolean | 状态（仅 type='controlAll' 时需要）                         |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型            | 说明     |
+| --------------- | -------- |
 | Promise<Object> | 响应结果 |
 
 **示例**：
@@ -471,7 +473,7 @@ await handler.disconnect();
 const handler = new BluetoothHandler();
 const response = await handler.sendCommand({
   type: 'lightOn',
-  lightId: 5
+  lightId: 5,
 });
 ```
 
@@ -485,8 +487,8 @@ const response = await handler.sendCommand({
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型    | 说明       |
+| ------- | ---------- |
 | boolean | 是否已连接 |
 
 **示例**：
@@ -517,15 +519,15 @@ class SerialPortHandler {
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名   | 类型   | 说明                  |
+| -------- | ------ | --------------------- |
 | portName | string | 串口名称（如 'COM4'） |
 | baudRate | number | 波特率（默认 115200） |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明     |
+| ------------- | -------- |
 | Promise<void> | 连接结果 |
 
 **示例**：
@@ -545,8 +547,8 @@ await handler.connect('COM4', 115200);
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明     |
+| ------------- | -------- |
 | Promise<void> | 断开结果 |
 
 **示例**：
@@ -564,14 +566,14 @@ await handler.disconnect();
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名  | 类型   | 说明                            |
+| ------- | ------ | ------------------------------- |
 | command | Object | 命令对象（同 BluetoothHandler） |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型            | 说明     |
+| --------------- | -------- |
 | Promise<Object> | 响应结果 |
 
 **示例**：
@@ -580,7 +582,7 @@ await handler.disconnect();
 const handler = new SerialPortHandler();
 const response = await handler.sendCommand({
   type: 'lightOn',
-  lightId: 5
+  lightId: 5,
 });
 ```
 
@@ -594,8 +596,8 @@ const response = await handler.sendCommand({
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型    | 说明       |
+| ------- | ---------- |
 | boolean | 是否已连接 |
 
 **示例**：
@@ -619,26 +621,26 @@ const connected = handler.isConnected();
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型                   | 说明     |
+| ---------------------- | -------- |
 | Promise<Array<Object>> | 器件数组 |
 
 **器件对象结构**：
 
-| 字段 | 类型 | 说明 |
-|-----|-----|-----|
-| id | string | 器件ID |
-| supplierId | string | 供应商编号 |
-| name | string | 器件名称 |
-| function | string | 功能描述 |
-| resistance | string | 电阻值（可选） |
-| voltage | string | 电压值（可选） |
-| capacitance | string | 电容值（可选） |
-| inductance | string | 电感值（可选） |
-| current | string | 电流值（可选） |
-| shelf | string | 器件架（A/B/C/D） |
-| createdAt | string | 创建时间 |
-| updatedAt | string | 更新时间 |
+| 字段        | 类型   | 说明              |
+| ----------- | ------ | ----------------- |
+| id          | string | 器件ID            |
+| supplierId  | string | 供应商编号        |
+| name        | string | 器件名称          |
+| function    | string | 功能描述          |
+| resistance  | string | 电阻值（可选）    |
+| voltage     | string | 电压值（可选）    |
+| capacitance | string | 电容值（可选）    |
+| inductance  | string | 电感值（可选）    |
+| current     | string | 电流值（可选）    |
+| shelf       | string | 器件架（A/B/C/D） |
+| createdAt   | string | 创建时间          |
+| updatedAt   | string | 更新时间          |
 
 **示例**：
 
@@ -655,15 +657,15 @@ const devices = await StorageService.getDevices();
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名   | 类型   | 说明   |
+| -------- | ------ | ------ |
 | deviceId | string | 器件ID |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
-| Promise<Object|null> | 器件对象或null |
+| 类型           | 说明  |
+| -------------- | ----- | -------------- |
+| Promise<Object | null> | 器件对象或null |
 
 **示例**：
 
@@ -679,14 +681,14 @@ const device = await StorageService.getDeviceById('1');
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名 | 类型   | 说明     |
+| ------ | ------ | -------- |
 | device | Object | 器件对象 |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明     |
+| ------------- | -------- |
 | Promise<void> | 保存结果 |
 
 **示例**：
@@ -698,7 +700,7 @@ await StorageService.saveDevice({
   name: '10Ω电阻器',
   function: '限流、分压',
   resistance: '10Ω',
-  shelf: 'A'
+  shelf: 'A',
 });
 ```
 
@@ -710,14 +712,14 @@ await StorageService.saveDevice({
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名   | 类型   | 说明   |
+| -------- | ------ | ------ |
 | deviceId | string | 器件ID |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明     |
+| ------------- | -------- |
 | Promise<void> | 删除结果 |
 
 **示例**：
@@ -734,14 +736,14 @@ await StorageService.deleteDevice('1');
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名  | 类型   | 说明       |
+| ------- | ------ | ---------- |
 | keyword | string | 搜索关键词 |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型                   | 说明           |
+| ---------------------- | -------------- |
 | Promise<Array<Object>> | 匹配的器件数组 |
 
 **示例**：
@@ -758,14 +760,14 @@ const devices = await StorageService.searchDevices('电阻');
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
-| shelf | string | 器件架（A/B/C/D） |
+| 参数名 | 类型   | 说明              |
+| ------ | ------ | ----------------- |
+| shelf  | string | 器件架（A/B/C/D） |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型                   | 说明             |
+| ---------------------- | ---------------- |
 | Promise<Array<Object>> | 筛选后的器件数组 |
 
 **示例**：
@@ -784,27 +786,27 @@ const devices = await StorageService.filterByShelf('A');
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型                   | 说明    |
+| ---------------------- | ------- |
 | Promise<Array<Object>> | BOM数组 |
 
 **BOM对象结构**：
 
-| 字段 | 类型 | 说明 |
-|-----|-----|-----|
-| id | string | BOM ID |
-| name | string | BOM名称 |
-| items | Array<Object> | BOM项列表 |
-| createdAt | string | 创建时间 |
+| 字段      | 类型          | 说明      |
+| --------- | ------------- | --------- |
+| id        | string        | BOM ID    |
+| name      | string        | BOM名称   |
+| items     | Array<Object> | BOM项列表 |
+| createdAt | string        | 创建时间  |
 
 **BOM项结构**：
 
-| 字段 | 类型 | 说明 |
-|-----|-----|-----|
-| id | string | 器件ID |
-| name | string | 器件名称 |
-| quantity | number | 数量 |
-| status | string | 状态（'available'/'unavailable'） |
+| 字段     | 类型   | 说明                              |
+| -------- | ------ | --------------------------------- |
+| id       | string | 器件ID                            |
+| name     | string | 器件名称                          |
+| quantity | number | 数量                              |
+| status   | string | 状态（'available'/'unavailable'） |
 
 **示例**：
 
@@ -820,14 +822,14 @@ const boms = await StorageService.getBOMs();
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
-| bom | Object | BOM对象 |
+| 参数名 | 类型   | 说明    |
+| ------ | ------ | ------- |
+| bom    | Object | BOM对象 |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明     |
+| ------------- | -------- |
 | Promise<void> | 保存结果 |
 
 **示例**：
@@ -836,7 +838,7 @@ const boms = await StorageService.getBOMs();
 await StorageService.saveBOM({
   id: '1',
   name: '项目A-BOM',
-  items: [{ id: '1', name: '10Ω电阻器', quantity: 10 }]
+  items: [{ id: '1', name: '10Ω电阻器', quantity: 10 }],
 });
 ```
 
@@ -848,14 +850,14 @@ await StorageService.saveBOM({
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
-| bomId | string | BOM ID |
+| 参数名 | 类型   | 说明   |
+| ------ | ------ | ------ |
+| bomId  | string | BOM ID |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明     |
+| ------------- | -------- |
 | Promise<void> | 删除结果 |
 
 **示例**：
@@ -874,19 +876,19 @@ await StorageService.deleteBOM('1');
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型                   | 说明     |
+| ---------------------- | -------- |
 | Promise<Array<Object>> | 用户数组 |
 
 **用户对象结构**：
 
-| 字段 | 类型 | 说明 |
-|-----|-----|-----|
-| id | string | 用户ID |
-| username | string | 用户名 |
-| password | string | 加密后的密码 |
-| role | string | 角色（'admin'/'user'） |
-| createdAt | string | 创建时间 |
+| 字段      | 类型   | 说明                   |
+| --------- | ------ | ---------------------- |
+| id        | string | 用户ID                 |
+| username  | string | 用户名                 |
+| password  | string | 加密后的密码           |
+| role      | string | 角色（'admin'/'user'） |
+| createdAt | string | 创建时间               |
 
 **示例**：
 
@@ -902,14 +904,14 @@ const users = await StorageService.getUsers();
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
-| user | Object | 用户对象 |
+| 参数名 | 类型   | 说明     |
+| ------ | ------ | -------- |
+| user   | Object | 用户对象 |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明     |
+| ------------- | -------- |
 | Promise<void> | 保存结果 |
 
 **示例**：
@@ -919,7 +921,7 @@ await StorageService.saveUser({
   id: '1',
   username: 'admin',
   password: 'encrypted_password',
-  role: 'admin'
+  role: 'admin',
 });
 ```
 
@@ -931,16 +933,16 @@ await StorageService.saveUser({
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
+| 参数名   | 类型   | 说明   |
+| -------- | ------ | ------ |
 | username | string | 用户名 |
-| password | string | 密码 |
+| password | string | 密码   |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
-| Promise<Object|null> | 用户对象或null |
+| 类型           | 说明  |
+| -------------- | ----- | -------------- |
+| Promise<Object | null> | 用户对象或null |
 
 **示例**：
 
@@ -958,8 +960,8 @@ const user = await StorageService.login('admin', 'admin');
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型            | 说明     |
+| --------------- | -------- |
 | Promise<Object> | 备份数据 |
 
 **示例**：
@@ -976,14 +978,14 @@ const backup = await StorageService.backupData();
 
 **参数**：
 
-| 参数名 | 类型 | 说明 |
-|-------|-----|-----|
-| data | Object | 备份数据 |
+| 参数名 | 类型   | 说明     |
+| ------ | ------ | -------- |
+| data   | Object | 备份数据 |
 
 **返回值**：
 
-| 类型 | 说明 |
-|-----|-----|
+| 类型          | 说明     |
+| ------------- | -------- |
 | Promise<void> | 恢复结果 |
 
 **示例**：
@@ -996,20 +998,20 @@ await StorageService.restoreData(backupData);
 
 ## 附录：命令类型枚举
 
-| 命令类型 | 说明 | 对应命令字 |
-|---------|-----|-----------|
-| heartbeat | 心跳 | 0x00 |
-| lightOn | 点亮灯 | 0x01 |
-| lightOff | 熄灭灯 | 0x02 |
-| controlAll | 控制所有灯 | 0x03 |
+| 命令类型   | 说明       | 对应命令字 |
+| ---------- | ---------- | ---------- |
+| heartbeat  | 心跳       | 0x00       |
+| lightOn    | 点亮灯     | 0x01       |
+| lightOff   | 熄灭灯     | 0x02       |
+| controlAll | 控制所有灯 | 0x03       |
 
 ---
 
 ## 附录：响应命令字映射
 
 | 发送命令字 | 响应命令字 |
-|-----------|-----------|
-| 0x00 | 0x80 |
-| 0x01 | 0x81 |
-| 0x02 | 0x82 |
-| 0x03 | 0x83 |
+| ---------- | ---------- |
+| 0x00       | 0x80       |
+| 0x01       | 0x81       |
+| 0x02       | 0x82       |
+| 0x03       | 0x83       |

@@ -9,22 +9,22 @@
  * 帧头定义
  * 帧格式：55 AA CMD LEN DATA... CRC
  */
-const FRAME_HEADER_1 = 0x55;      // 帧头第一字节
-const FRAME_HEADER_2 = 0xAA;      // 帧头第二字节
-const FRAME_MIN_LENGTH = 6;       // 最小帧长度（不含数据时：帧头2 + 命令1 + 长度1 + CRC1 = 5？不对，实际最小是6，因为数据至少2字节）
+const FRAME_HEADER_1 = 0x55; // 帧头第一字节
+const FRAME_HEADER_2 = 0xaa; // 帧头第二字节
+const FRAME_MIN_LENGTH = 6; // 最小帧长度（不含数据时：帧头2 + 命令1 + 长度1 + CRC1 = 5？不对，实际最小是6，因为数据至少2字节）
 
 /**
  * 命令字定义
  * MCU响应时命令字 = 原命令字 | 0x80
  */
 const COMMANDS = {
-  HEARTBEAT: 0x00,           // 心跳命令
-  LIGHT_ON: 0x01,            // 点亮对应灯
-  LIGHT_OFF: 0x02,           // 熄灭对应灯
-  CONTROL_ALL_LIGHTS: 0x03,   // 控制所有灯
-  RESPONSE_HEARTBEAT: 0x80,   // 心跳响应 (0x00 | 0x80)
-  RESPONSE_LIGHT_ON: 0x81,    // 点亮响应 (0x01 | 0x80)
-  RESPONSE_LIGHT_OFF: 0x82,   // 熄灭响应 (0x02 | 0x80)
+  HEARTBEAT: 0x00, // 心跳命令
+  LIGHT_ON: 0x01, // 点亮对应灯
+  LIGHT_OFF: 0x02, // 熄灭对应灯
+  CONTROL_ALL_LIGHTS: 0x03, // 控制所有灯
+  RESPONSE_HEARTBEAT: 0x80, // 心跳响应 (0x00 | 0x80)
+  RESPONSE_LIGHT_ON: 0x81, // 点亮响应 (0x01 | 0x80)
+  RESPONSE_LIGHT_OFF: 0x82, // 熄灭响应 (0x02 | 0x80)
   RESPONSE_CONTROL_ALL: 0x83, // 控制所有灯响应 (0x03 | 0x80)
 };
 
@@ -51,15 +51,15 @@ function reverseByte(byte) {
  */
 function generateCRCTable() {
   const table = new Uint8Array(256);
-  const polynomial = 0x31;  // CRC-8/MAXIM 多项式
+  const polynomial = 0x31; // CRC-8/MAXIM 多项式
 
   for (let i = 0; i < 256; i++) {
-    let crc = reverseByte(i);  // 输入反转
+    let crc = reverseByte(i); // 输入反转
     for (let j = 0; j < 8; j++) {
       // CRC计算核心逻辑
       crc = (crc << 1) ^ (crc & 0x80 ? polynomial : 0);
     }
-    table[i] = reverseByte(crc & 0xFF);  // 输出反转
+    table[i] = reverseByte(crc & 0xff); // 输出反转
   }
   return table;
 }
@@ -130,8 +130,8 @@ class CommandBuilder {
    */
   buildLightOnCommand(lightId) {
     // 将lightId拆分为高字节和低字节（大端序）
-    const highByte = (lightId >> 8) & 0xFF;
-    const lowByte = lightId & 0xFF;
+    const highByte = (lightId >> 8) & 0xff;
+    const lowByte = lightId & 0xff;
     const data = [highByte, lowByte];
     const frame = this.buildFrame(COMMANDS.LIGHT_ON, data);
     return frame;
@@ -144,8 +144,8 @@ class CommandBuilder {
    */
   buildLightOffCommand(lightId) {
     // 将lightId拆分为高字节和低字节（大端序）
-    const highByte = (lightId >> 8) & 0xFF;
-    const lowByte = lightId & 0xFF;
+    const highByte = (lightId >> 8) & 0xff;
+    const lowByte = lightId & 0xff;
     const data = [highByte, lowByte];
     const frame = this.buildFrame(COMMANDS.LIGHT_OFF, data);
     return frame;
@@ -158,9 +158,9 @@ class CommandBuilder {
    */
   buildControlAllLightsCommand(state) {
     // 0xFFFF = 点亮所有灯，0x0000 = 熄灭所有灯
-    const value = state ? 0xFFFF : 0x0000;
-    const highByte = (value >> 8) & 0xFF;
-    const lowByte = value & 0xFF;
+    const value = state ? 0xffff : 0x0000;
+    const highByte = (value >> 8) & 0xff;
+    const lowByte = value & 0xff;
     const data = [highByte, lowByte];
     const frame = this.buildFrame(COMMANDS.CONTROL_ALL_LIGHTS, data);
     return frame;
@@ -195,12 +195,12 @@ class CommandBuilder {
     // 解析命令字和数据长度
     const command = response[2];
     const length = response[3];
-    
+
     // 验证数据长度是否合理
     if (4 + length > response.length - 1) {
       return null;
     }
-    
+
     // 提取数据部分
     const data = response.slice(4, 4 + length);
 

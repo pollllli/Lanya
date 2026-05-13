@@ -197,7 +197,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
           }
         });
         setComponents(sortedComponents);
-        
+
         // 计算匹配到的物理器件数量
         let matchedDeviceCount = 0;
         for (const component of sortedComponents) {
@@ -206,11 +206,16 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
             matchedDeviceCount += matchInfo.devices.length;
           }
         }
-        
+
         Alert.alert(
           '成功',
           `成功导入 ${sortedComponents.length} 种器件，匹配到 ${matchedDeviceCount} 个物理器件`,
-          [{ text: '确定', onPress: () => autoLightAllSufficientDevices(sortedComponents) }]
+          [
+            {
+              text: '确定',
+              onPress: () => autoLightAllSufficientDevices(sortedComponents),
+            },
+          ]
         );
       } else {
         Alert.alert('错误', '未找到有效的器件数据');
@@ -226,17 +231,19 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     try {
       let updatedDevices = [...devices];
       let updatedCount = 0;
-      
+
       console.log('=== 开始更新库存数量 ===');
       console.log('器件架中的器件数量:', updatedDevices.length);
       console.log('BOM组件数量:', bomComponents.length);
-      
+
       // 打印所有器件架中的器件，便于调试
       console.log('\n器件架中的器件列表:');
       updatedDevices.forEach((device, idx) => {
-        console.log(`${idx+1}. 名称: "${device.name}", 供应商编号: "${device.supplierId}", 当前库存: "${device.stock}", 封装: "${device.package}"`);
+        console.log(
+          `${idx + 1}. 名称: "${device.name}", 供应商编号: "${device.supplierId}", 当前库存: "${device.stock}", 封装: "${device.package}"`
+        );
       });
-      
+
       for (const component of bomComponents) {
         console.log('\n===============================');
         console.log('处理组件:');
@@ -245,10 +252,10 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         console.log('  器件名称:', component.deviceName || '(空)');
         console.log('  封装:', component.package || '(空)');
         console.log('  需要数量:', component.quantity);
-        
+
         let matched = false;
         let matchReason = '';
-        
+
         const index = updatedDevices.findIndex((device) => {
           // 方式1: 通过供应商编号精确匹配
           if (component.supplierId && device.supplierId) {
@@ -258,7 +265,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
               return true;
             }
           }
-          
+
           // 方式2: 通过器件名称精确匹配
           if (component.deviceName && device.name) {
             if (device.name === component.deviceName) {
@@ -267,49 +274,61 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
               return true;
             }
           }
-          
+
           // 方式3: 通过器件名称包含匹配（忽略大小写）
           if (component.deviceName && device.name) {
             const deviceNameLower = device.name.toLowerCase();
             const componentNameLower = component.deviceName.toLowerCase();
-            if (deviceNameLower.includes(componentNameLower) || componentNameLower.includes(deviceNameLower)) {
+            if (
+              deviceNameLower.includes(componentNameLower) ||
+              componentNameLower.includes(deviceNameLower)
+            ) {
               matched = true;
               matchReason = '器件名称包含匹配';
               return true;
             }
           }
-          
+
           // 方式4: 通过构建的组件名称匹配
           if (component.name && device.name) {
             const deviceNameLower = device.name.toLowerCase();
-            const componentNameLower = component.name.toLowerCase().replace(/\s*\([^)]+\)\s*/g, '').trim();
-            if (deviceNameLower.includes(componentNameLower) || componentNameLower.includes(deviceNameLower)) {
+            const componentNameLower = component.name
+              .toLowerCase()
+              .replace(/\s*\([^)]+\)\s*/g, '')
+              .trim();
+            if (
+              deviceNameLower.includes(componentNameLower) ||
+              componentNameLower.includes(deviceNameLower)
+            ) {
               matched = true;
               matchReason = '组件名称包含匹配';
               return true;
             }
           }
-          
+
           // 方式5: 通过值字段匹配（B列的值）
           if (component.description && device.name) {
             const deviceNameLower = device.name.toLowerCase();
             const descLower = component.description.toLowerCase();
-            if (deviceNameLower.includes(descLower) || descLower.includes(deviceNameLower)) {
+            if (
+              deviceNameLower.includes(descLower) ||
+              descLower.includes(deviceNameLower)
+            ) {
               matched = true;
               matchReason = '描述/值字段匹配';
               return true;
             }
           }
-          
+
           return false;
         });
-        
+
         if (index !== -1) {
           const device = updatedDevices[index];
           const oldQuantity = device.quantity || 0;
           updatedDevices[index] = {
             ...device,
-            quantity: component.quantity
+            quantity: component.quantity,
           };
           console.log(`  ✅ 匹配成功! ${matchReason}`);
           console.log(`  器件: ${device.name}`);
@@ -319,17 +338,21 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
           console.log(`  ❌ 未找到匹配的器件`);
         }
       }
-      
+
       // 保存更新后的器件数据
       await StorageService.saveDevices(updatedDevices);
       // 更新本地状态
       setDevices(updatedDevices);
-      
+
       console.log(`\n=== 更新完成 ===`);
       console.log(`更新了 ${updatedCount} 个器件的库存`);
       console.log(`未匹配 ${bomComponents.length - updatedCount} 个组件`);
     } catch (error) {
-      logError('更新器件库存数量失败', error, 'BOMScreen.updateDeviceQuantities');
+      logError(
+        '更新器件库存数量失败',
+        error,
+        'BOMScreen.updateDeviceQuantities'
+      );
     }
   };
 
@@ -340,56 +363,74 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     console.log(`组件供应商编号: ${component.supplierId}`);
     console.log(`组件器件名称: ${component.deviceName}`);
     console.log(`组件封装: ${component.package}`);
-    
+
     // 封装匹配辅助函数（处理前导零差异）
     const checkPackageMatch = (devicePackage, componentPackage) => {
       if (!componentPackage || !devicePackage) return true;
       // 去除前导零后比较
       const normalizedDevicePackage = devicePackage.replace(/^0+/, '');
       const normalizedComponentPackage = componentPackage.replace(/^0+/, '');
-      return normalizedDevicePackage === normalizedComponentPackage || 
-             devicePackage === componentPackage;
+      return (
+        normalizedDevicePackage === normalizedComponentPackage ||
+        devicePackage === componentPackage
+      );
     };
-    
+
     // 查找匹配的器件（必须同时满足供应商编号和器件名称匹配）
     const matchedDevices = devices.filter((device, index) => {
       console.log(`\n检查器件[${index}]: ${device.name}`);
       console.log(`  器件供应商编号: ${device.supplierId}`);
       console.log(`  器件封装: ${device.package}`);
-      
+
       // 方式1: 同时满足供应商编号和器件名称匹配（最高优先级）
-      if (component.supplierId && device.supplierId && component.deviceName && device.name) {
+      if (
+        component.supplierId &&
+        device.supplierId &&
+        component.deviceName &&
+        device.name
+      ) {
         const supplierMatch = device.supplierId === component.supplierId;
         const nameMatch = device.name === component.deviceName;
-        console.log(`  供应商编号匹配: ${supplierMatch}, 器件名称匹配: ${nameMatch}`);
+        console.log(
+          `  供应商编号匹配: ${supplierMatch}, 器件名称匹配: ${nameMatch}`
+        );
         if (supplierMatch && nameMatch) {
-          const packageMatch = checkPackageMatch(device.package, component.package);
+          const packageMatch = checkPackageMatch(
+            device.package,
+            component.package
+          );
           console.log(`  封装匹配: ${packageMatch}`);
           if (packageMatch) return true;
         }
       }
-      
+
       // 方式2: 仅按供应商编号精确匹配（当没有器件名称时）
       if (component.supplierId && device.supplierId && !component.deviceName) {
         if (device.supplierId === component.supplierId) {
-          const packageMatch = checkPackageMatch(device.package, component.package);
+          const packageMatch = checkPackageMatch(
+            device.package,
+            component.package
+          );
           console.log(`  仅供应商编号匹配: true, 封装匹配: ${packageMatch}`);
           if (packageMatch) return true;
         }
       }
-      
+
       // 方式3: 仅按器件名称精确匹配（当没有供应商编号时）
       if (component.deviceName && device.name && !component.supplierId) {
         if (device.name === component.deviceName) {
-          const packageMatch = checkPackageMatch(device.package, component.package);
+          const packageMatch = checkPackageMatch(
+            device.package,
+            component.package
+          );
           console.log(`  仅器件名称匹配: true, 封装匹配: ${packageMatch}`);
           if (packageMatch) return true;
         }
       }
-      
+
       return false;
     });
-    
+
     // 如果找到匹配的器件
     if (matchedDevices.length > 0) {
       // 计算器件架中的总数量
@@ -397,22 +438,22 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         const deviceQuantity = device.quantity ? parseInt(device.quantity) : 1;
         return sum + (isNaN(deviceQuantity) ? 1 : deviceQuantity);
       }, 0);
-      
+
       return {
         exists: true,
         totalInShelf: totalInShelf,
         sufficient: totalInShelf >= component.quantity,
         devices: matchedDevices,
-        matchedCount: matchedDevices.length
+        matchedCount: matchedDevices.length,
       };
     }
-    
+
     return {
       exists: false,
       totalInShelf: 0,
       sufficient: false,
       devices: [],
-      matchedCount: 0
+      matchedCount: 0,
     };
   };
 
@@ -455,7 +496,9 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       }
     } else {
       // 如果传入了device，也要检查数量是否充足
-      const deviceQuantity = targetDevice.quantity ? parseInt(targetDevice.quantity) : 1;
+      const deviceQuantity = targetDevice.quantity
+        ? parseInt(targetDevice.quantity)
+        : 1;
       if (deviceQuantity < component.quantity) {
         Alert.alert(
           '提示',
@@ -493,36 +536,44 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
   };
 
   // 自动点亮所有数量充足的器件灯
-  const autoLightAllSufficientDevices = async (importedComponents = components) => {
+  const autoLightAllSufficientDevices = async (
+    importedComponents = components
+  ) => {
     console.log('=== autoLightAllSufficientDevices 开始 ===');
-    
+
     // 检查蓝牙连接
     if (!global.deviceConnection) {
       console.log('❌ 未连接蓝牙设备，跳过自动点亮');
       Alert.alert('提示', '请先在连接页面连接蓝牙设备');
       return;
     }
-    
+
     console.log('✅ 蓝牙设备已连接');
     console.log(`📦 导入的组件数量: ${importedComponents.length}`);
     console.log(`📦 器件架中的器件数量: ${devices.length}`);
-    
+
     // 打印所有器件信息
     console.log('=== 器件架中的所有器件 ===');
     devices.forEach((d, index) => {
-      console.log(`索引: ${index}, ID: ${d.id}, 名称: ${d.name}, 供应商编号: ${d.supplierId}, 位置: ${d.position}`);
+      console.log(
+        `索引: ${index}, ID: ${d.id}, 名称: ${d.name}, 供应商编号: ${d.supplierId}, 位置: ${d.position}`
+      );
     });
 
     // 收集所有需要点亮的器件（包括重复匹配的器件，因为它们的id不同，指令帧也不同）
     const devicesToLight = [];
-    
+
     for (const component of importedComponents) {
       const matchInfo = getDeviceMatchInfo(component);
-      if (matchInfo.devices && matchInfo.devices.length > 0 && matchInfo.sufficient) {
+      if (
+        matchInfo.devices &&
+        matchInfo.devices.length > 0 &&
+        matchInfo.sufficient
+      ) {
         // 将所有匹配到的器件添加到列表中
-        matchInfo.devices.forEach(device => {
+        matchInfo.devices.forEach((device) => {
           // 检查该器件是否已经在列表中（避免重复点亮同一个物理器件）
-          const alreadyExists = devicesToLight.some(d => d.id === device.id);
+          const alreadyExists = devicesToLight.some((d) => d.id === device.id);
           if (!alreadyExists) {
             devicesToLight.push({ device, component });
             console.log(`添加待点亮器件: ${device.name}, ID: ${device.id}`);
@@ -542,17 +593,17 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     // 遍历点亮所有器件
     let successCount = 0;
     let failCount = 0;
-    
+
     for (const { device, component } of devicesToLight) {
       console.log(`\n处理器件: ${device.name}`);
       console.log(`组件名称: ${component.name}`);
-      console.log(`器件ID: ${device.id}, 器件位置: ${device.position}`);
-      
+      console.log(`器件ID: ${device.id}, 位号: ${device.position}`);
+
       // 使用器件在数组中的索引作为硬件位置（从1开始）
       const index = devices.findIndex((d) => d.id === device.id);
       const hardwarePosition = index + 1;
       console.log(`器件在数组中的索引: ${index}, 计算的硬件位置: ${hardwarePosition}`);
-      
+
       try {
         const { handler } = global.deviceConnection;
         console.log('📤 发送点亮指令...');
@@ -560,7 +611,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
           type: 'lightOn',
           lightId: hardwarePosition,
         });
-        
+
         if (response && response.success) {
           console.log(`✅ 指令发送成功`);
           successCount++;
@@ -568,8 +619,8 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
           console.log(`❌ 指令发送失败: ${response?.message || '未知错误'}`);
           failCount++;
         }
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
       } catch (error) {
         console.error(`❌ 发送指令异常:`, error);
         failCount++;
@@ -585,8 +636,10 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     } else {
       Alert.alert('提示', '未能点亮任何器件灯，请检查蓝牙连接和器件匹配');
     }
-    
-    console.log(`=== 自动点亮完成 === 成功: ${successCount}, 失败: ${failCount}`);
+
+    console.log(
+      `=== 自动点亮完成 === 成功: ${successCount}, 失败: ${failCount}`
+    );
   };
 
   return (
@@ -612,7 +665,9 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
               // 如果有多个匹配的器件，每个都单独显示（因为它们的id不同，指令帧也不同）
               if (matchInfo.devices && matchInfo.devices.length > 0) {
                 return matchInfo.devices.map((device, deviceIndex) => {
-                  const deviceQuantity = device.quantity ? parseInt(device.quantity) : 1;
+                  const deviceQuantity = device.quantity
+                    ? parseInt(device.quantity)
+                    : 1;
                   const isSufficient = deviceQuantity >= component.quantity;
                   let bgColor, textColor, statusText;
                   if (!isSufficient) {
@@ -624,7 +679,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                     textColor = '#2e7d32';
                     statusText = `✓ 数量充足 (现${deviceQuantity})`;
                   }
-                  
+
                   return (
                     <TouchableOpacity
                       key={`${compIndex}-${deviceIndex}-${device.id}`}
@@ -637,10 +692,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                     >
                       <View style={{ flex: 1 }}>
                         <Text
-                          style={[
-                            styles.componentText,
-                            { color: textColor },
-                          ]}
+                          style={[styles.componentText, { color: textColor }]}
                         >
                           {component.name}
                         </Text>
@@ -653,14 +705,9 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                           </Text>
                         )}
                         <Text style={styles.deviceInfo}>
-                          器件位置: {device.position || `位置 ${deviceIndex + 1}`}
+                          位号: {device.position || `未设置`}
                         </Text>
-                        <Text
-                          style={[
-                            styles.statusText,
-                            { color: textColor },
-                          ]}
-                        >
+                        <Text style={[styles.statusText, { color: textColor }]}>
                           {statusText}
                         </Text>
                       </View>
@@ -679,10 +726,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                   >
                     <View style={{ flex: 1 }}>
                       <Text
-                        style={[
-                          styles.componentText,
-                          { color: '#757575' },
-                        ]}
+                        style={[styles.componentText, { color: '#757575' }]}
                       >
                         {component.name}
                       </Text>
@@ -749,43 +793,10 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  inputContainer: {
-    marginBottom: 20,
-  },
   label: {
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 8,
-  },
-  input: {
-    backgroundColor: 'white',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  addComponentContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  componentInput: {
-    flex: 1,
-    backgroundColor: 'white',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginRight: 10,
-  },
-  addButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
   },
   componentsList: {
     marginBottom: 20,
@@ -825,10 +836,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 2,
   },
-  removeButton: {
-    color: '#FF3B30',
-    fontWeight: 'bold',
-  },
   emptyText: {
     fontSize: 14,
     color: '#666',
@@ -852,128 +859,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 5,
   },
-  loadButton: {
-    backgroundColor: '#007AFF',
-  },
   importButton: {
     backgroundColor: '#ff9800',
-  },
-  saveButton: {
-    backgroundColor: '#4caf50',
   },
   buttonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  saveButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    width: '90%',
-    maxHeight: '90%',
-    padding: 16,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  closeButton: {
-    color: '#007AFF',
-    fontWeight: 'bold',
-  },
-  loadingText: {
-    fontSize: 16,
-    textAlign: 'center',
-    padding: 20,
-  },
-  bomItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  bomInfo: {
-    flex: 1,
-  },
-  bomName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  bomDetails: {
-    fontSize: 12,
-    color: '#666',
-  },
-  bomActions: {
-    flexDirection: 'row',
-  },
-  actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  deleteButton: {
-    backgroundColor: '#FF3B30',
-  },
-  actionButtonText: {
-    color: '#007AFF',
-    fontWeight: 'bold',
-  },
-  deleteButtonText: {
-    color: 'white',
-  },
-  deviceItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  batchDeviceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  deviceInfo: {
-    flex: 1,
-  },
-  deviceName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  deviceDetails: {
-    fontSize: 12,
-    color: '#666',
-  },
-  selectButton: {
-    color: '#007AFF',
     fontWeight: 'bold',
   },
   // 批量选择相关样式
