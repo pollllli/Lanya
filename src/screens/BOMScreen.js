@@ -79,11 +79,10 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     try {
       setIsImporting(true);
 
-      // 选择文件
+      // 选择文件（只支持Excel）
       const result = await DocumentPicker.getDocumentAsync({
         type: [
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'text/csv',
         ],
         copyToCacheDirectory: true,
       });
@@ -99,51 +98,35 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       // 先重新加载器件架数据，确保拿到最新的
       await loadDevices();
 
-      // 检查文件类型
-      if (fileName.endsWith('.csv')) {
-        // 处理CSV文件
-        try {
-          // 读取CSV文件内容
-          const fileContent = await FileSystem.readAsStringAsync(fileUri);
-          parseBOMData(fileContent, 'csv');
-        } catch (error) {
-          logError('处理CSV文件失败', error, 'BOMScreen.handleImportBOM');
-          Alert.alert(
-            '错误',
-            `处理CSV文件失败: ${error.message || '请检查文件格式'}`
-          );
-        }
-      } else {
-        // 处理Excel文件
-        try {
-          // 复制文件到缓存目录
-          const cacheDir = FileSystem.cacheDirectory;
-          const localUri = cacheDir + fileName;
+      // 处理Excel文件
+      try {
+        // 复制文件到缓存目录
+        const cacheDir = FileSystem.cacheDirectory;
+        const localUri = cacheDir + fileName;
 
-          await FileSystem.copyAsync({
-            from: fileUri,
-            to: localUri,
-          });
+        await FileSystem.copyAsync({
+          from: fileUri,
+          to: localUri,
+        });
 
-          // 读取文件内容
-          const fileContent = await FileSystem.readAsStringAsync(localUri, {
-            encoding: 'base64',
-          });
+        // 读取文件内容
+        const fileContent = await FileSystem.readAsStringAsync(localUri, {
+          encoding: 'base64',
+        });
 
-          // 解码base64并解析
-          const binaryString = atob(fileContent);
-          const workbook = XLSX.read(binaryString, { type: 'binary' });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const csvContent = XLSX.utils.sheet_to_csv(worksheet);
-          parseBOMData(csvContent, 'csv');
-        } catch (error) {
-          logError('处理Excel文件失败', error, 'BOMScreen.handleImportBOM');
-          Alert.alert(
-            '错误',
-            `处理Excel文件失败: ${error.message || '请检查文件格式'}`
-          );
-        }
+        // 解码base64并解析
+        const binaryString = atob(fileContent);
+        const workbook = XLSX.read(binaryString, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+        parseBOMData(csvContent, 'csv');
+      } catch (error) {
+        logError('处理Excel文件失败', error, 'BOMScreen.handleImportBOM');
+        Alert.alert(
+          '错误',
+          `处理Excel文件失败: ${error.message || '请检查文件格式'}`
+        );
       }
     } catch (error) {
       logError('导入BOM失败', error, 'BOMScreen.handleImportBOM');
@@ -214,9 +197,19 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
           }
         });
         setComponents(sortedComponents);
+        
+        // 计算匹配到的物理器件数量
+        let matchedDeviceCount = 0;
+        for (const component of sortedComponents) {
+          const matchInfo = getDeviceMatchInfo(component);
+          if (matchInfo.devices && matchInfo.devices.length > 0) {
+            matchedDeviceCount += matchInfo.devices.length;
+          }
+        }
+        
         Alert.alert(
           '成功',
-          `成功导入 ${sortedComponents.length} 个器件`,
+          `成功导入 ${sortedComponents.length} 种器件，匹配到 ${matchedDeviceCount} 个物理器件`,
           [{ text: '确定', onPress: () => autoLightAllSufficientDevices(sortedComponents) }]
         );
       } else {
@@ -358,57 +351,38 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
              devicePackage === componentPackage;
     };
     
-    // 先查找匹配的器件
+    // 查找匹配的器件（必须同时满足供应商编号和器件名称匹配）
     const matchedDevices = devices.filter((device, index) => {
       console.log(`\n检查器件[${index}]: ${device.name}`);
       console.log(`  器件供应商编号: ${device.supplierId}`);
       console.log(`  器件封装: ${device.package}`);
       
-      // 方式1: 按供应商编号匹配
-      if (component.supplierId && device.supplierId) {
-        const matchBySupplierId = device.supplierId === component.supplierId ||
-                                 (device.id && device.id.toString() === component.supplierId);
-        console.log(`  供应商匹配: ${matchBySupplierId}`);
-        if (matchBySupplierId) {
-          const packageMatch = checkPackageMatch(device.package, component.package);
-          console.log(`  封装匹配: ${packageMatch} (器件:${device.package}, BOM:${component.package})`);
-          if (packageMatch) return true;
-        }
-      }
-      
-      // 方式2: 按器件名称精确匹配
-      if (component.deviceName && device.name) {
+      // 方式1: 同时满足供应商编号和器件名称匹配（最高优先级）
+      if (component.supplierId && device.supplierId && component.deviceName && device.name) {
+        const supplierMatch = device.supplierId === component.supplierId;
         const nameMatch = device.name === component.deviceName;
-        console.log(`  名称精确匹配: ${nameMatch}`);
-        if (nameMatch) {
+        console.log(`  供应商编号匹配: ${supplierMatch}, 器件名称匹配: ${nameMatch}`);
+        if (supplierMatch && nameMatch) {
           const packageMatch = checkPackageMatch(device.package, component.package);
           console.log(`  封装匹配: ${packageMatch}`);
           if (packageMatch) return true;
         }
       }
       
-      // 方式3: 按器件名称包含匹配
-      if (component.deviceName && device.name) {
-        const deviceNameLower = device.name.toLowerCase();
-        const componentNameLower = component.deviceName.toLowerCase();
-        const includeMatch = deviceNameLower.includes(componentNameLower) || componentNameLower.includes(deviceNameLower);
-        console.log(`  名称包含匹配: ${includeMatch}`);
-        if (includeMatch) {
+      // 方式2: 仅按供应商编号精确匹配（当没有器件名称时）
+      if (component.supplierId && device.supplierId && !component.deviceName) {
+        if (device.supplierId === component.supplierId) {
           const packageMatch = checkPackageMatch(device.package, component.package);
-          console.log(`  封装匹配: ${packageMatch}`);
+          console.log(`  仅供应商编号匹配: true, 封装匹配: ${packageMatch}`);
           if (packageMatch) return true;
         }
       }
       
-      // 方式4: 按组件名称（解析后的名称）匹配
-      if (component.name && device.name) {
-        const deviceNameLower = device.name.toLowerCase();
-        const componentNameLower = component.name.toLowerCase();
-        const nameMatch = deviceNameLower.includes(componentNameLower) || componentNameLower.includes(deviceNameLower);
-        console.log(`  组件名称匹配: ${nameMatch}`);
-        if (nameMatch) {
+      // 方式3: 仅按器件名称精确匹配（当没有供应商编号时）
+      if (component.deviceName && device.name && !component.supplierId) {
+        if (device.name === component.deviceName) {
           const packageMatch = checkPackageMatch(device.package, component.package);
-          console.log(`  封装匹配: ${packageMatch}`);
+          console.log(`  仅器件名称匹配: true, 封装匹配: ${packageMatch}`);
           if (packageMatch) return true;
         }
       }
@@ -428,7 +402,8 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         exists: true,
         totalInShelf: totalInShelf,
         sufficient: totalInShelf >= component.quantity,
-        devices: matchedDevices
+        devices: matchedDevices,
+        matchedCount: matchedDevices.length
       };
     }
     
@@ -436,7 +411,8 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       exists: false,
       totalInShelf: 0,
       sufficient: false,
-      devices: []
+      devices: [],
+      matchedCount: 0
     };
   };
 
@@ -447,73 +423,62 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
   };
 
   // 处理器件点击，控制灯的状态（取出器件）
-  const handleComponentPress = async (component) => {
+  const handleComponentPress = async (component, device = null) => {
     // 检查是否有蓝牙连接
     if (!global.deviceConnection) {
       Alert.alert('提示', '请先在连接页面连接蓝牙设备');
       return;
     }
 
-    // 获取器件匹配信息
-    const matchInfo = getDeviceMatchInfo(component);
+    // 如果没有传入具体的器件，需要查找匹配的器件
+    let targetDevice = device;
+    if (!targetDevice) {
+      // 获取器件匹配信息
+      const matchInfo = getDeviceMatchInfo(component);
 
-    // 只有数量足够的器件才能取出
-    if (matchInfo.exists && matchInfo.sufficient) {
-      // 使用和getDeviceMatchInfo相同的匹配逻辑查找设备
-      let device = null;
-      
-      // 如果有供应商编号，必须严格按供应商编号匹配
-      if (component.supplierId) {
-        device = devices.find(
-          (d) =>
-            d.supplierId === component.supplierId ||
-            (d.id && d.id.toString() === component.supplierId)
-        );
-      }
-      
-      // 如果没有供应商编号或按供应商编号没找到，才按器件名称匹配
-      if (!device && !component.supplierId && component.deviceName) {
-        device = devices.find(
-          (d) =>
-            d.name === component.deviceName ||
-            (d.name && d.name.toLowerCase().includes(component.deviceName.toLowerCase()))
-        );
-      }
-      
-      if (device) {
-        try {
-          // 使用数组索引作为硬件位置（从1开始）
-          const index = devices.findIndex((d) => d.id === device.id);
-          const hardwarePosition = index + 1;
-          const { handler } = global.deviceConnection;
-          const response = await handler.sendCommand({
-            type: 'lightOff',
-            lightId: hardwarePosition,
-          });
-
-          if (response.success) {
-            Alert.alert(
-              '成功',
-              `已取出器件: ${component.name}\n对应位置灯已熄灭`
-            );
-          } else {
-            Alert.alert('错误', `取出器件失败: ${response.message}`);
-          }
-        } catch (error) {
-          Alert.alert('错误', '发送命令失败，请检查设备连接');
+      // 只有数量足够的器件才能取出
+      if (!matchInfo.exists || !matchInfo.sufficient) {
+        if (matchInfo.exists && !matchInfo.sufficient) {
+          Alert.alert(
+            '提示',
+            `器件数量不足！\n需要: ${component.quantity}\n现有: ${matchInfo.totalInShelf}`
+          );
+        } else {
+          Alert.alert('提示', '器件不在器件架中，无法取出');
         }
-      } else {
-        Alert.alert('错误', '未找到对应的器件');
+        return;
       }
-    } else if (matchInfo.exists && !matchInfo.sufficient) {
-      // 数量不足
-      Alert.alert(
-        '提示',
-        `器件数量不足！\n需要: ${component.quantity}\n现有: ${matchInfo.totalInShelf}`
-      );
+
+      // 使用第一个匹配到的设备
+      if (matchInfo.devices && matchInfo.devices.length > 0) {
+        targetDevice = matchInfo.devices[0];
+      }
+    }
+
+    if (targetDevice) {
+      try {
+        // 使用数组索引作为硬件位置（从1开始）
+        const index = devices.findIndex((d) => d.id === targetDevice.id);
+        const hardwarePosition = index + 1;
+        const { handler } = global.deviceConnection;
+        const response = await handler.sendCommand({
+          type: 'lightOff',
+          lightId: hardwarePosition,
+        });
+
+        if (response.success) {
+          Alert.alert(
+            '成功',
+            `已取出器件: ${component.name}\n对应位置灯已熄灭`
+          );
+        } else {
+          Alert.alert('错误', `取出器件失败: ${response.message}`);
+        }
+      } catch (error) {
+        Alert.alert('错误', '发送命令失败，请检查设备连接');
+      }
     } else {
-      // 不在器件架中
-      Alert.alert('提示', '器件不在器件架中，无法取出');
+      Alert.alert('错误', '未找到对应的器件');
     }
   };
 
@@ -538,68 +503,65 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       console.log(`索引: ${index}, ID: ${d.id}, 名称: ${d.name}, 供应商编号: ${d.supplierId}, 位置: ${d.position}`);
     });
 
-    // 过滤数量充足的组件
-    const sufficientComponents = importedComponents.filter((c) => {
-      const matchInfo = getDeviceMatchInfo(c);
-      const result = matchInfo.exists && matchInfo.sufficient;
-      console.log(`组件: ${c.name}, 存在: ${matchInfo.exists}, 数量充足: ${matchInfo.sufficient}, 结果: ${result}`);
-      return result;
-    });
+    // 收集所有需要点亮的器件（包括重复匹配的器件，因为它们的id不同，指令帧也不同）
+    const devicesToLight = [];
+    
+    for (const component of importedComponents) {
+      const matchInfo = getDeviceMatchInfo(component);
+      if (matchInfo.devices && matchInfo.devices.length > 0 && matchInfo.sufficient) {
+        // 将所有匹配到的器件添加到列表中
+        matchInfo.devices.forEach(device => {
+          // 检查该器件是否已经在列表中（避免重复点亮同一个物理器件）
+          const alreadyExists = devicesToLight.some(d => d.id === device.id);
+          if (!alreadyExists) {
+            devicesToLight.push({ device, component });
+            console.log(`添加待点亮器件: ${device.name}, ID: ${device.id}`);
+          }
+        });
+      }
+    }
 
-    console.log(`⭐ 数量充足的器件数量: ${sufficientComponents.length}`);
+    console.log(`⭐ 待点亮的器件数量: ${devicesToLight.length}`);
 
-    if (sufficientComponents.length === 0) {
+    if (devicesToLight.length === 0) {
       console.log('❌ 没有数量充足的器件');
       Alert.alert('提示', '没有数量充足的器件可以点亮');
       return;
     }
 
-    // 遍历点亮
+    // 遍历点亮所有器件
     let successCount = 0;
     let failCount = 0;
     
-    for (const component of sufficientComponents) {
-      console.log(`\n处理组件: ${component.name}`);
-      console.log(`供应商编号: ${component.supplierId}`);
+    for (const { device, component } of devicesToLight) {
+      console.log(`\n处理器件: ${device.name}`);
+      console.log(`组件名称: ${component.name}`);
+      console.log(`器件ID: ${device.id}, 器件位置: ${device.position}`);
       
-      // 使用 getDeviceMatchInfo 获取已经匹配到的设备
-      const matchInfo = getDeviceMatchInfo(component);
+      // 使用器件在数组中的索引作为硬件位置（从1开始）
+      const index = devices.findIndex((d) => d.id === device.id);
+      const hardwarePosition = index + 1;
+      console.log(`器件在数组中的索引: ${index}, 计算的硬件位置: ${hardwarePosition}`);
       
-      if (matchInfo.devices && matchInfo.devices.length > 0) {
-        // 使用第一个匹配到的设备
-        const device = matchInfo.devices[0];
-        console.log(`✅ 使用已匹配的器件: ${device.name}`);
-        console.log(`器件ID: ${device.id}, 器件位置: ${device.position}`);
+      try {
+        const { handler } = global.deviceConnection;
+        console.log('📤 发送点亮指令...');
+        const response = await handler.sendCommand({
+          type: 'lightOn',
+          lightId: hardwarePosition,
+        });
         
-        // 使用器件的position字段作为硬件位置，如果没有则使用索引
-        const index = devices.findIndex((d) => d.id === device.id);
-        // 直接使用数组索引作为硬件位置（从1开始）
-        const hardwarePosition = index + 1;
-        console.log(`器件在数组中的索引: ${index}, 计算的硬件位置: ${hardwarePosition}`);
-        
-        try {
-          const { handler } = global.deviceConnection;
-          console.log('📤 发送点亮指令...');
-          const response = await handler.sendCommand({
-            type: 'lightOn',
-            lightId: hardwarePosition,
-          });
-          
-          if (response && response.success) {
-            console.log(`✅ 指令发送成功`);
-            successCount++;
-          } else {
-            console.log(`❌ 指令发送失败: ${response?.message || '未知错误'}`);
-            failCount++;
-          }
-          
-          await new Promise(resolve => setTimeout(resolve, 500));
-        } catch (error) {
-          console.error(`❌ 发送指令异常:`, error);
+        if (response && response.success) {
+          console.log(`✅ 指令发送成功`);
+          successCount++;
+        } else {
+          console.log(`❌ 指令发送失败: ${response?.message || '未知错误'}`);
           failCount++;
         }
-      } else {
-        console.log(`❌ 未找到匹配的器件`);
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error(`❌ 发送指令异常:`, error);
         failCount++;
       }
     }
@@ -635,62 +597,100 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
             />
           </View>
           {filteredComponents.length > 0 ? (
-            filteredComponents.map((component, index) => {
+            filteredComponents.map((component, compIndex) => {
               const matchInfo = getDeviceMatchInfo(component);
-              // 确定背景色和文字色
-              let bgColor, textColor, statusText;
-              if (!matchInfo.exists) {
-                bgColor = '#f5f5f5'; // 灰色 - 不存在
-                textColor = '#757575';
-                statusText = '✗ 不在器件架中';
-              } else if (!matchInfo.sufficient) {
-                bgColor = '#fff3e0'; // 黄色 - 数量不足
-                textColor = '#ef6c00';
-                statusText = `⚠ 数量不足 (需${component.quantity}/现${matchInfo.totalInShelf})`;
+              // 如果有多个匹配的器件，每个都单独显示（因为它们的id不同，指令帧也不同）
+              if (matchInfo.devices && matchInfo.devices.length > 0) {
+                return matchInfo.devices.map((device, deviceIndex) => {
+                  const deviceQuantity = device.quantity ? parseInt(device.quantity) : 1;
+                  const isSufficient = deviceQuantity >= component.quantity;
+                  let bgColor, textColor, statusText;
+                  if (!isSufficient) {
+                    bgColor = '#fff3e0'; // 黄色 - 数量不足
+                    textColor = '#ef6c00';
+                    statusText = `⚠ 数量不足 (需${component.quantity}/现${deviceQuantity})`;
+                  } else {
+                    bgColor = '#e8f5e8'; // 绿色 - 数量足够
+                    textColor = '#2e7d32';
+                    statusText = `✓ 数量充足 (现${deviceQuantity})`;
+                  }
+                  
+                  return (
+                    <TouchableOpacity
+                      key={`${compIndex}-${deviceIndex}-${device.id}`}
+                      style={[
+                        styles.componentItem,
+                        { backgroundColor: bgColor },
+                      ]}
+                      onPress={() => handleComponentPress(component, device)}
+                      activeOpacity={1}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.componentText,
+                            { color: textColor },
+                          ]}
+                        >
+                          {component.name}
+                        </Text>
+                        <Text style={styles.componentQuantity}>
+                          需要数量: {component.quantity}
+                        </Text>
+                        {component.supplierId && (
+                          <Text style={styles.supplierId}>
+                            编号: {component.supplierId}
+                          </Text>
+                        )}
+                        <Text style={styles.deviceInfo}>
+                          器件位置: {device.position || `位置 ${deviceIndex + 1}`}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.statusText,
+                            { color: textColor },
+                          ]}
+                        >
+                          {statusText}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                });
               } else {
-                bgColor = '#e8f5e8'; // 绿色 - 数量足够
-                textColor = '#2e7d32';
-                statusText = `✓ 数量充足 (现${matchInfo.totalInShelf})`;
-              }
-              
-              return (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.componentItem,
-                    { backgroundColor: bgColor },
-                  ]}
-                  onPress={() => handleComponentPress(component)}
-                  activeOpacity={1}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={[
-                        styles.componentText,
-                        { color: textColor },
-                      ]}
-                    >
-                      {component.name}
-                    </Text>
-                    <Text style={styles.componentQuantity}>
-                      需要数量: {component.quantity}
-                    </Text>
-                    {component.supplierId && (
-                      <Text style={styles.supplierId}>
-                        编号: {component.supplierId}
+                // 没有匹配的器件
+                return (
+                  <View
+                    key={compIndex}
+                    style={[
+                      styles.componentItem,
+                      { backgroundColor: '#f5f5f5' },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.componentText,
+                          { color: '#757575' },
+                        ]}
+                      >
+                        {component.name}
                       </Text>
-                    )}
-                    <Text
-                      style={[
-                        styles.statusText,
-                        { color: textColor },
-                      ]}
-                    >
-                      {statusText}
-                    </Text>
+                      <Text style={styles.componentQuantity}>
+                        需要数量: {component.quantity}
+                      </Text>
+                      {component.supplierId && (
+                        <Text style={styles.supplierId}>
+                          编号: {component.supplierId}
+                        </Text>
+                      )}
+                      <Text style={[styles.statusText, { color: '#757575' }]}>
+                        ✗ 不在器件架中
+                      </Text>
+                    </View>
                   </View>
-                </TouchableOpacity>
-              );
+                );
+              }
             })
           ) : (
             <Text style={styles.emptyText}>
@@ -801,6 +801,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   supplierId: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  deviceInfo: {
     fontSize: 12,
     color: '#666',
     marginTop: 2,

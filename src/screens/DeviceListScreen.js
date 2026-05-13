@@ -139,15 +139,24 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     loadSearchHistory();
     checkConnectionStatus();
     
-    // 注册蓝牙断开回调
-    global.onBluetoothDisconnected = () => {
+    // 注册蓝牙断开回调（使用命名函数便于清理）
+    const handleBluetoothDisconnected = () => {
       console.log('收到蓝牙断开通知，更新连接状态');
       dispatch({ type: 'SET_CONNECTED', payload: false });
     };
     
+    // 保存旧的回调（如果有）
+    const previousCallback = global.onBluetoothDisconnected;
+    global.onBluetoothDisconnected = handleBluetoothDisconnected;
+    
     // 清理回调
     return () => {
-      delete global.onBluetoothDisconnected;
+      // 恢复之前的回调（如果有的话）
+      if (previousCallback) {
+        global.onBluetoothDisconnected = previousCallback;
+      } else {
+        delete global.onBluetoothDisconnected;
+      }
     };
   }, []);
 
@@ -156,19 +165,25 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     useCallback(() => {
       console.log('DeviceListScreen获得焦点，重新加载数据');
       loadDevices();
-    }, [loadDevices])
+    }, [])
   );
 
   // 定期检查连接状态，确保指示器实时更新
+  const checkConnectionStatusRef = useRef(checkConnectionStatus);
+  
+  useEffect(() => {
+    checkConnectionStatusRef.current = checkConnectionStatus;
+  }, [checkConnectionStatus]);
+  
   useEffect(() => {
     const checkInterval = setInterval(() => {
-      checkConnectionStatus();
+      checkConnectionStatusRef.current();
     }, 1000); // 每秒检查一次
 
     return () => {
       clearInterval(checkInterval);
     };
-  }, [checkConnectionStatus]);
+  }, []);
 
   // 检查连接状态（优先检查全局连接对象，再检测蓝牙设备真实状态）
   const checkConnectionStatus = useCallback(async () => {
@@ -239,13 +254,19 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     }
   }, [dispatch]);
 
+  const handleGenerateSearchSuggestionsRef = useRef(handleGenerateSearchSuggestions);
+
+  useEffect(() => {
+    handleGenerateSearchSuggestionsRef.current = handleGenerateSearchSuggestions;
+  }, [handleGenerateSearchSuggestions]);
+
   useEffect(() => {
     if (searchQuery && searchQuery.trim() !== '') {
-      handleGenerateSearchSuggestions(searchQuery);
+      handleGenerateSearchSuggestionsRef.current(searchQuery);
     } else {
       dispatch({ type: 'SET_SHOW_SUGGESTIONS', payload: false });
     }
-  }, [searchQuery, handleGenerateSearchSuggestions, dispatch]);
+  }, [searchQuery, dispatch]);
 
   const handleGenerateSearchSuggestions = useCallback((query) => {
     if (!query || !query.trim()) {

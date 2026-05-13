@@ -258,10 +258,28 @@ class StorageService {
       
       const users = await getData('users');
       if (users) {
+        let needFix = false;
+        const fixedUsers = users.map(user => {
+          if (user.username === 'admin' && user.isAdmin !== true) {
+            needFix = true;
+            return { ...user, isAdmin: true };
+          }
+          if (user.username === 'user' && user.isAdmin !== false) {
+            needFix = true;
+            return { ...user, isAdmin: false };
+          }
+          return user;
+        });
+        
+        if (needFix) {
+          await this.saveUsers(fixedUsers);
+          this.#setToCache('users', fixedUsers);
+          return fixedUsers;
+        }
+        
         this.#setToCache('users', users);
         return users;
       } else {
-        // 如果没有用户数据，创建默认用户
         const defaultUsers = [
           { username: 'admin', password: 'admin', isAdmin: true, createdAt: new Date().toISOString() },
           { username: 'user', password: 'user', isAdmin: false, createdAt: new Date().toISOString() }
@@ -722,12 +740,35 @@ class StorageService {
         '型号': 'model',
         '功能': 'function',
         '分类': 'category',
-        '类别': 'category'
+        '类别': 'category',
+        '器件架': 'shelfId',
+        '货架': 'shelfId',
+        '制造商': 'manufacturer',
+        '供应商': 'supplier',
+        '价格': 'price',
+        '物理位置': 'location',
+        'datasheet': 'datasheet'
       };
       
       // 解析CSV内容
       const lines = csvContent.split('\n');
       const headers = parseCSVLine(lines[0]).map(header => header.trim());
+      
+      // 检查是否包含器件架列
+      const hasShelfColumn = headers.some(header => {
+        const headerLower = header.toLowerCase();
+        return header.includes('器件架') || header.includes('货架') || header.includes('位置') ||
+               headerLower === 'shelf' || headerLower === 'shelfd' || headerLower === 'location';
+      });
+      
+      if (!hasShelfColumn) {
+        return { 
+          success: false, 
+          imported: 0, 
+          errors: ['导入失败：表格中必须包含器件架列（列名可以是：器件架、货架、位置）'], 
+          total: 0 
+        };
+      }
       
       // 逐行解析
       for (let i = 1; i < lines.length; i++) {
@@ -791,6 +832,25 @@ class StorageService {
         
         // 处理字段名兼容性（shelfid -> shelfId）
         if (device.shelfid) device.shelfId = device.shelfid;
+        
+        // 验证器件架列数据不能为空
+        if (!device.shelfId || !device.shelfId.trim()) {
+          errors.push(`第 ${i+1} 行: 器件架不能为空`);
+          continue;
+        }
+        
+        // 处理器件架值（支持 A/B/C/D 或 1/2/3/4）
+        if (device.shelfId) {
+          const shelfValue = device.shelfId.trim().toUpperCase();
+          // 如果是 A/B/C/D，转换为对应的数字
+          const shelfMap = { 'A': '1', 'B': '2', 'C': '3', 'D': '4' };
+          if (shelfMap[shelfValue]) {
+            device.shelfId = shelfMap[shelfValue];
+          } else if (!['1', '2', '3', '4'].includes(device.shelfId)) {
+            errors.push(`第 ${i+1} 行: 器件架值无效，只能是 A/B/C/D 或 1/2/3/4`);
+            continue;
+          }
+        }
         
         // 移除不需要的字段
         delete device.shelfid;

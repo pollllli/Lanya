@@ -12,20 +12,33 @@ import CommandBuilder from './CommandBuilder';
  */
 if (typeof btoa === 'undefined') {
   global.btoa = function(str) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     let result = '';
     let i = 0;
+    
     for (; i < str.length; i += 3) {
       const a = str.charCodeAt(i) || 0;
       const b = str.charCodeAt(i + 1) || 0;
       const c = str.charCodeAt(i + 2) || 0;
+      
+      // 将3个字节编码为4个Base64字符
       result += chars[a >> 2];
       result += chars[((a & 3) << 4) | (b >> 4)];
       result += chars[((b & 15) << 2) | (c >> 6)];
       result += chars[c & 63];
     }
+    
+    // 根据剩余字节数添加填充
     const padding = str.length % 3;
-    return padding ? result.slice(0, padding - 3) + '==='.slice(padding) : result;
+    if (padding === 1) {
+      // 剩余1个字节，需要2个=填充
+      result = result.slice(0, -2) + '==';
+    } else if (padding === 2) {
+      // 剩余2个字节，需要1个=填充
+      result = result.slice(0, -1) + '=';
+    }
+    
+    return result;
   };
 }
 
@@ -675,22 +688,38 @@ class BluetoothHandler {
     const base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     let result = '';
     let i = 0;
+    const len = bytes.length;
     
-    while (i < bytes.length) {
-      const b1 = bytes[i++] & 0xFF;
-      const b2 = i < bytes.length ? bytes[i++] & 0xFF : 0;
-      const b3 = i < bytes.length ? bytes[i++] & 0xFF : 0;
+    while (i < len) {
+      // 每次处理3个字节
+      const byte1 = bytes[i] & 0xFF;
+      const byte2 = i + 1 < len ? bytes[i + 1] & 0xFF : 0;
+      const byte3 = i + 2 < len ? bytes[i + 2] & 0xFF : 0;
       
       // 将3个字节编码为4个Base64字符
-      const enc1 = b1 >> 2;
-      const enc2 = ((b1 & 0x03) << 4) | (b2 >> 4);
-      const enc3 = ((b2 & 0x0F) << 2) | (b3 >> 6);
-      const enc4 = b3 & 0x3F;
+      const enc1 = byte1 >> 2;
+      const enc2 = ((byte1 & 0x03) << 4) | (byte2 >> 4);
+      const enc3 = ((byte2 & 0x0F) << 2) | (byte3 >> 6);
+      const enc4 = byte3 & 0x3F;
       
       result += base64Chars[enc1];
       result += base64Chars[enc2];
-      result += i > bytes.length + 1 ? '=' : base64Chars[enc3];
-      result += i > bytes.length ? '=' : base64Chars[enc4];
+      
+      // 根据剩余字节数添加填充
+      const remaining = len - i;
+      if (remaining >= 2) {
+        result += base64Chars[enc3];
+      } else {
+        result += '=';
+      }
+      
+      if (remaining >= 3) {
+        result += base64Chars[enc4];
+      } else {
+        result += '=';
+      }
+      
+      i += 3;
     }
     
     console.log('简单Base64编码成功:', result);

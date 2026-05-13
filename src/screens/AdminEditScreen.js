@@ -73,16 +73,15 @@ const AdminEditScreen = ({ navigation, route }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
 
-  // 处理Excel/CSV导入
+  // 处理Excel导入
   const handleImport = async () => {
     try {
       setIsImporting(true);
 
-      // 选择文件
+      // 选择文件（只支持Excel）
       const result = await DocumentPicker.getDocumentAsync({
         type: [
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'text/csv',
         ],
         copyToCacheDirectory: true,
       });
@@ -95,92 +94,51 @@ const AdminEditScreen = ({ navigation, route }) => {
       const fileUri = result.assets[0].uri;
       const fileName = result.assets[0].name;
 
-      // 检查文件类型
-      if (fileName.endsWith('.csv')) {
-        // 处理CSV文件
-        try {
-          // 读取CSV文件内容
-          const fileContent = await FileSystem.readAsStringAsync(fileUri);
+      // 复制文件到缓存目录
+      const cacheDir = FileSystem.cacheDirectory;
+      const localUri = cacheDir + fileName;
 
-          // 使用新的批量导入方法
-          const result = await StorageService.importDevicesFromCSV(fileContent);
+      await FileSystem.copyAsync({
+        from: fileUri,
+        to: localUri,
+      });
 
-          if (result.success) {
-            let message = `成功导入 ${result.imported} 个器件`;
-            if (result.errors && result.errors.length > 0) {
-              message += `\n\n有 ${result.errors.length} 个错误:`;
-              result.errors.forEach((error) => {
-                message += `\n- ${error}`;
-              });
-            }
-            Alert.alert('导入结果', message);
-            navigation.goBack();
-          } else {
-            Alert.alert('错误', '导入失败，请检查文件格式');
-          }
-        } catch (error) {
-          logError('处理CSV文件失败', error, 'AdminEditScreen.handleImport');
-          Alert.alert(
-            '错误',
-            `处理CSV文件失败: ${error.message || '请检查文件格式'}`
-          );
+      // 读取文件内容
+      const fileContent = await FileSystem.readAsStringAsync(localUri, {
+        encoding: 'base64',
+      });
+
+      // 解码base64并解析
+      const binaryString = atob(fileContent);
+      const workbook = XLSX.read(binaryString, { type: 'binary' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      if (jsonData.length === 0) {
+        Alert.alert('错误', '文件中没有数据，请检查文件内容');
+        setIsImporting(false);
+        return;
+      }
+
+      // 转换为CSV格式
+      const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+
+      // 使用新的批量导入方法
+      const importResult = await StorageService.importDevicesFromCSV(csvContent);
+
+      if (importResult.success) {
+        let message = `成功导入 ${importResult.imported} 个器件`;
+        if (importResult.errors && importResult.errors.length > 0) {
+          message += `\n\n有 ${importResult.errors.length} 个错误:`;
+          importResult.errors.forEach((error) => {
+            message += `\n- ${error}`;
+          });
         }
+        Alert.alert('导入结果', message);
+        navigation.goBack();
       } else {
-        // 处理Excel文件
-        try {
-          // 复制文件到缓存目录
-          const cacheDir = FileSystem.cacheDirectory;
-          const localUri = cacheDir + fileName;
-
-          await FileSystem.copyAsync({
-            from: fileUri,
-            to: localUri,
-          });
-
-          // 读取文件内容
-          const fileContent = await FileSystem.readAsStringAsync(localUri, {
-            encoding: 'base64',
-          });
-
-          // 解码base64并解析
-          const binaryString = atob(fileContent);
-          const workbook = XLSX.read(binaryString, { type: 'binary' });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-          if (jsonData.length === 0) {
-            Alert.alert('错误', '文件中没有数据，请检查文件内容');
-            setIsImporting(false);
-            return;
-          }
-
-          // 转换为CSV格式
-          const csvContent = XLSX.utils.sheet_to_csv(worksheet);
-
-          // 使用新的批量导入方法
-          const result = await StorageService.importDevicesFromCSV(csvContent);
-
-          if (result.success) {
-            let message = `成功导入 ${result.imported} 个器件`;
-            if (result.errors && result.errors.length > 0) {
-              message += `\n\n有 ${result.errors.length} 个错误:`;
-              result.errors.forEach((error) => {
-                message += `\n- ${error}`;
-              });
-            }
-            Alert.alert('导入结果', message);
-            navigation.goBack();
-          } else {
-            Alert.alert('错误', '导入失败，请检查文件格式');
-          }
-        } catch (error) {
-          logError('处理Excel文件失败', error, 'AdminEditScreen.handleImport');
-          Alert.alert(
-            '错误',
-            `处理Excel文件失败: ${error.message || '请检查文件格式'}`
-          );
-        }
+        Alert.alert('错误', importResult.errors && importResult.errors.length > 0 ? importResult.errors.join('\n') : '导入失败，请检查文件格式');
       }
     } catch (error) {
       logError('导入失败', error, 'AdminEditScreen.handleImport');
@@ -320,7 +278,7 @@ const AdminEditScreen = ({ navigation, route }) => {
             disabled={isImporting}
           >
             <Text style={styles.importButtonText}>
-              {isImporting ? '导入中...' : '从Excel/CSV导入'}
+              {isImporting ? '导入中...' : '从Excel导入'}
             </Text>
           </TouchableOpacity>
 
