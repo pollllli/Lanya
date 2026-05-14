@@ -10,6 +10,15 @@ const DeviceDetailScreen = ({ navigation, route }) => {
 
   const getHardwarePosition = useMemo(async () => {
     try {
+      // 优先使用设备的location字段，如果没有则使用数组索引
+      if (device.location) {
+        const parsedLocation = parseInt(device.location, 10);
+        if (!isNaN(parsedLocation)) {
+          setHardwarePosition(parsedLocation);
+          return parsedLocation;
+        }
+      }
+      // 如果location无效或不存在，则使用数组索引
       const devices = await StorageService.getDevices();
       const index = devices.findIndex((d) => d.id === device.id);
       const position = index >= 0 ? index + 1 : 1;
@@ -19,7 +28,7 @@ const DeviceDetailScreen = ({ navigation, route }) => {
       console.error('获取硬件位置失败:', error);
       return 1;
     }
-  }, [device.id]);
+  }, [device.id, device.location]);
 
   const handleSendCommand = async () => {
     if (!global.deviceConnection) {

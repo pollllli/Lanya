@@ -510,9 +510,16 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
 
     if (targetDevice) {
       try {
-        // 使用数组索引作为硬件位置（从1开始）
-        const index = devices.findIndex((d) => d.id === targetDevice.id);
-        const hardwarePosition = index + 1;
+        // 优先使用设备的location字段，如果没有则使用数组索引作为硬件位置（从1开始）
+        let hardwarePosition;
+        if (targetDevice.location) {
+          const parsedLocation = parseInt(targetDevice.location, 10);
+          const index = devices.findIndex((d) => d.id === targetDevice.id);
+          hardwarePosition = isNaN(parsedLocation) ? (index + 1) : parsedLocation;
+        } else {
+          const index = devices.findIndex((d) => d.id === targetDevice.id);
+          hardwarePosition = index + 1;
+        }
         const { handler } = global.deviceConnection;
         const response = await handler.sendCommand({
           type: 'lightOff',
@@ -599,10 +606,17 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       console.log(`组件名称: ${component.name}`);
       console.log(`器件ID: ${device.id}, 位号: ${device.position}`);
 
-      // 使用器件在数组中的索引作为硬件位置（从1开始）
-      const index = devices.findIndex((d) => d.id === device.id);
-      const hardwarePosition = index + 1;
-      console.log(`器件在数组中的索引: ${index}, 计算的硬件位置: ${hardwarePosition}`);
+      // 优先使用设备的location字段，如果没有则使用数组索引作为硬件位置（从1开始）
+      let hardwarePosition;
+      if (device.location) {
+        const parsedLocation = parseInt(device.location, 10);
+        const index = devices.findIndex((d) => d.id === device.id);
+        hardwarePosition = isNaN(parsedLocation) ? (index + 1) : parsedLocation;
+      } else {
+        const index = devices.findIndex((d) => d.id === device.id);
+        hardwarePosition = index + 1;
+      }
+      console.log(`器件位置: ${device.location}, 计算的硬件位置: ${hardwarePosition}`);
 
       try {
         const { handler } = global.deviceConnection;

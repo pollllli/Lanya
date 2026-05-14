@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import StorageService from '../services/StorageService';
+import BluetoothHandler from '../services/BluetoothHandler';
 import { logError } from '../utils/ErrorHandler';
 
 const UserContext = createContext();
@@ -23,17 +24,56 @@ export const UserProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    const loadUser = async () => {
+    const initApp = async () => {
       try {
+        // 加载用户信息
         const loggedInUser = await StorageService.getLoggedInUser();
         setUser(loggedInUser);
+
+        // 尝试自动连接上次连接的蓝牙设备
+        await tryAutoConnectBluetooth();
       } catch (error) {
-        logError('加载用户信息失败', error, 'UserProvider.loadUser');
+        logError('初始化应用失败', error, 'UserProvider.initApp');
       } finally {
         setIsLoading(false);
       }
     };
-    loadUser();
+
+    // 自动连接蓝牙设备
+    const tryAutoConnectBluetooth = async () => {
+      try {
+        // 获取上次连接的设备信息
+        const lastDevice = await StorageService.getLastConnectedDevice();
+        if (!lastDevice || !lastDevice.deviceId) {
+          console.log('没有找到上次连接的蓝牙设备信息');
+          return;
+        }
+
+        console.log('应用启动时尝试自动连接蓝牙设备:', lastDevice.deviceName);
+
+        // 初始化蓝牙处理器
+        const bluetoothHandler = new BluetoothHandler();
+        await bluetoothHandler.initialize();
+
+        // 尝试连接
+        const result = await bluetoothHandler.connectToDevice(lastDevice.deviceId);
+        if (result.success) {
+          console.log('蓝牙自动连接成功:', lastDevice.deviceName);
+          
+          // 设置全局连接状态
+          global.deviceConnection = {
+            type: 'bluetooth',
+            device: { id: lastDevice.deviceId, name: lastDevice.deviceName },
+            handler: bluetoothHandler,
+          };
+        }
+      } catch (error) {
+        console.log('蓝牙自动连接失败:', error.message);
+        // 自动连接失败不影响应用启动
+      }
+    };
+
+    initApp();
   }, []);
 
   const login = async (userData) => {

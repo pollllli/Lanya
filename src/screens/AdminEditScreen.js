@@ -162,9 +162,10 @@ const AdminEditScreen = ({ navigation, route }) => {
       errors.name = '请输入器件名称';
     }
 
-    if (!state.function.trim()) {
-      errors.function = '请输入功能描述';
-    }
+    // 功能描述不再是必填项
+    // if (!state.function.trim()) {
+    //   errors.function = '请输入功能描述';
+    // }
 
     // 验证单位格式
     if (
@@ -183,7 +184,7 @@ const AdminEditScreen = ({ navigation, route }) => {
 
     if (
       state.capacitance.trim() &&
-      !/^\d+(\.\d+)?[pµunm]?F$/.test(state.capacitance.trim())
+      !/^\d+(\.\d+)?[pμµunm]?F?$/i.test(state.capacitance.trim())
     ) {
       errors.capacitance = '电容格式不正确，例如：10μF, 1nF, 10uF';
     }
@@ -348,32 +349,8 @@ const AdminEditScreen = ({ navigation, route }) => {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>器件架</Text>
-              <View style={styles.shelfSelector}>
-                {['1', '2', '3', '4'].map((shelfId) => (
-                  <TouchableOpacity
-                    key={shelfId}
-                    style={[
-                      styles.shelfOption,
-                      state.shelfId === shelfId && styles.shelfOptionSelected,
-                    ]}
-                    onPress={() =>
-                      dispatch({
-                        type: 'SET_FIELD',
-                        payload: { field: 'shelfId', value: shelfId },
-                      })
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.shelfOptionText,
-                        state.shelfId === shelfId &&
-                          styles.shelfOptionTextSelected,
-                      ]}
-                    >
-                      器件架 {String.fromCharCode(64 + parseInt(shelfId))}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.shelfSelectorSingle}>
+                <Text style={styles.shelfOptionTextSelected}>器件架（一）</Text>
               </View>
             </View>
           </View>
@@ -653,7 +630,7 @@ const AdminEditScreen = ({ navigation, route }) => {
                     payload: { field: 'location', value: text },
                   })
                 }
-                placeholder="请输入位置"
+                placeholder="输入物理位置或序号（如：A1, B2, 1, 2, D1-5）"
               />
             </View>
 
@@ -784,6 +761,14 @@ const styles = StyleSheet.create({
   shelfSelector: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  shelfSelectorSingle: {
+    backgroundColor: '#4caf50',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#4caf50',
+    alignItems: 'center',
   },
   shelfOption: {
     flex: 1,

@@ -350,6 +350,59 @@ class StorageService {
   }
 
   /**
+   * 保存上次连接的蓝牙设备信息
+   * @param {Object} deviceInfo - 设备信息对象
+   * @param {string} deviceInfo.deviceId - 设备ID
+   * @param {string} deviceInfo.deviceName - 设备名称
+   * @returns {Promise<void>}
+   */
+  static async saveLastConnectedDevice(deviceInfo) {
+    try {
+      await saveData('lastConnectedDevice', deviceInfo);
+      this.#setToCache('lastConnectedDevice', deviceInfo);
+      console.log('蓝牙设备连接信息已保存:', deviceInfo);
+    } catch (error) {
+      logError('保存蓝牙设备连接信息失败', error, 'StorageService.saveLastConnectedDevice');
+      throw error;
+    }
+  }
+
+  /**
+   * 获取上次连接的蓝牙设备信息
+   * @returns {Promise<Object|null>} 设备信息对象，未找到返回null
+   */
+  static async getLastConnectedDevice() {
+    try {
+      const cached = this.#getFromCache('lastConnectedDevice');
+      if (cached) return cached;
+
+      const deviceInfo = await getData('lastConnectedDevice', null);
+      if (deviceInfo) {
+        this.#setToCache('lastConnectedDevice', deviceInfo);
+      }
+      return deviceInfo;
+    } catch (error) {
+      logError('获取蓝牙设备连接信息失败', error, 'StorageService.getLastConnectedDevice');
+      return null;
+    }
+  }
+
+  /**
+   * 清除上次连接的蓝牙设备信息
+   * @returns {Promise<void>}
+   */
+  static async clearLastConnectedDevice() {
+    try {
+      await removeData('lastConnectedDevice');
+      this.#cache.delete('lastConnectedDevice');
+      console.log('蓝牙设备连接信息已清除');
+    } catch (error) {
+      logError('清除蓝牙设备连接信息失败', error, 'StorageService.clearLastConnectedDevice');
+      throw error;
+    }
+  }
+
+  /**
    * 获取搜索历史
    * @param {number} [limit=10] - 限制数量
    * @returns {Promise<Array>} 搜索历史数组
@@ -796,42 +849,20 @@ class StorageService {
         功能: 'function',
         分类: 'category',
         类别: 'category',
-        器件架: 'shelfId',
-        货架: 'shelfId',
         制造商: 'manufacturer',
         供应商: 'supplier',
         价格: 'price',
         物理位置: 'location',
+        位置: 'location',
+        序号: 'location',
+        物理序号: 'location',
+        位置序号: 'location',
         datasheet: 'datasheet',
       };
 
       // 解析CSV内容
       const lines = csvContent.split('\n');
       const headers = parseCSVLine(lines[0]).map((header) => header.trim());
-
-      // 检查是否包含器件架列
-      const hasShelfColumn = headers.some((header) => {
-        const headerLower = header.toLowerCase();
-        return (
-          header.includes('器件架') ||
-          header.includes('货架') ||
-          header.includes('位置') ||
-          headerLower === 'shelf' ||
-          headerLower === 'shelfd' ||
-          headerLower === 'location'
-        );
-      });
-
-      if (!hasShelfColumn) {
-        return {
-          success: false,
-          imported: 0,
-          errors: [
-            '导入失败：表格中必须包含器件架列（列名可以是：器件架、货架、位置）',
-          ],
-          total: 0,
-        };
-      }
 
       // 逐行解析
       for (let i = 1; i < lines.length; i++) {
@@ -903,29 +934,8 @@ class StorageService {
           }
         }
 
-        // 处理字段名兼容性（shelfid -> shelfId）
-        if (device.shelfid) device.shelfId = device.shelfid;
-
-        // 验证器件架列数据不能为空
-        if (!device.shelfId || !device.shelfId.trim()) {
-          errors.push(`第 ${i + 1} 行: 器件架不能为空`);
-          continue;
-        }
-
-        // 处理器件架值（支持 A/B/C/D 或 1/2/3/4）
-        if (device.shelfId) {
-          const shelfValue = device.shelfId.trim().toUpperCase();
-          // 如果是 A/B/C/D，转换为对应的数字
-          const shelfMap = { A: '1', B: '2', C: '3', D: '4' };
-          if (shelfMap[shelfValue]) {
-            device.shelfId = shelfMap[shelfValue];
-          } else if (!['1', '2', '3', '4'].includes(device.shelfId)) {
-            errors.push(
-              `第 ${i + 1} 行: 器件架值无效，只能是 A/B/C/D 或 1/2/3/4`
-            );
-            continue;
-          }
-        }
+        // 全部默认放在器件架（一）
+        device.shelfId = '1';
 
         // 移除不需要的字段
         delete device.shelfid;

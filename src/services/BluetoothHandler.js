@@ -5,6 +5,7 @@
  */
 import { Platform } from 'react-native';
 import CommandBuilder from './CommandBuilder';
+import StorageService from './StorageService';
 
 /**
  * 全局 btoa 函数兼容处理（Web平台可能不支持）
@@ -249,6 +250,13 @@ class BluetoothHandler {
 
       // 详细发现服务和特征并更新UUID
       await this.discoverServicesAndCharacteristics(device);
+
+      // 保存连接的设备信息，以便下次自动连接
+      await StorageService.saveLastConnectedDevice({
+        deviceId: device.id,
+        deviceName: device.name || '未知设备',
+        connectedAt: new Date().toISOString(),
+      });
 
       console.log('=== 设备连接完成 ===');
       return { success: true, message: '设备连接成功' };

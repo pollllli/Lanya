@@ -50,14 +50,6 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     successMessage: '',
     isConnected: false,
     isLoading: false,
-    shelves: [
-      { id: '1', name: '器件架 A' },
-      { id: '2', name: '器件架 B' },
-      { id: '3', name: '器件架 C' },
-      { id: '4', name: '器件架 D' },
-    ],
-    selectedShelf: '',
-    showShelfDropdown: false,
   };
 
   // Reducer函数
@@ -97,10 +89,6 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
         return { ...state, successMessage: action.payload };
       case 'SET_CONNECTED':
         return { ...state, isConnected: action.payload };
-      case 'SET_SELECTED_SHELF':
-        return { ...state, selectedShelf: action.payload };
-      case 'SET_SHOW_SHELF_DROPDOWN':
-        return { ...state, showShelfDropdown: action.payload };
       case 'TOGGLE_DEVICE_SELECTION':
         return {
           ...state,
@@ -155,9 +143,6 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     successMessage,
     isConnected,
     isLoading,
-    shelves,
-    selectedShelf,
-    showShelfDropdown,
   } = state;
 
   useEffect(() => {
@@ -193,7 +178,6 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       
       // 保存当前搜索状态
       const currentSearchQuery = searchQuery;
-      const currentSelectedShelf = selectedShelf;
       const currentAdvancedParams = { ...advancedSearchParams };
       const currentIsAdvancedMode = isAdvancedSearchMode;
       
@@ -239,13 +223,13 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
           });
           dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
           dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: true });
-        } else if (currentSearchQuery.trim() !== '' || currentSelectedShelf) {
-          // 重新应用普通搜索或器件架筛选
-          const filtered = filterDevices(devices, currentSearchQuery, currentSelectedShelf);
+        } else if (currentSearchQuery.trim() !== '') {
+          // 重新应用普通搜索
+          const filtered = filterDevices(devices, currentSearchQuery, '');
           dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
         }
       }, 100);
-    }, [searchQuery, selectedShelf, advancedSearchParams, isAdvancedSearchMode, devices, loadDevices, dispatch])
+    }, [searchQuery, advancedSearchParams, isAdvancedSearchMode, devices, loadDevices, dispatch])
   );
 
   // 定期检查连接状态，确保指示器实时更新
@@ -418,8 +402,6 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
           dispatch({ type: 'SET_DEVICES', payload: storedDevices });
         }
       }
-      // 保持器件架为空，让用户手动导入或添加器件
-      // memoizedFilteredDevices会自动根据selectedShelf重新计算
     } catch (error) {
       logError('加载器件数据失败', error, 'DeviceListScreen.loadDevices');
       const errorMessage = `加载器件数据失败: ${formatErrorMessage(error)}`;
@@ -428,17 +410,6 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
   }, [dispatch]);
-
-  // 根据器件架筛选设备
-  const filterDevicesByShelf = useCallback(
-    (devicesList, shelfId) => {
-      const filtered = devicesList.filter(
-        (device) => device.shelfId === shelfId
-      );
-      dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
-    },
-    [dispatch]
-  );
 
   // 请求器件（点亮对应灯）
   const requestDevice = useCallback(
@@ -487,11 +458,10 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     if (isAdvancedSearchMode) {
       return filteredDevices;
     }
-    return filterDevices(devices, searchQuery, selectedShelf);
+    return filterDevices(devices, searchQuery, '');
   }, [
     devices,
     searchQuery,
-    selectedShelf,
     isAdvancedSearchMode,
     filteredDevices,
   ]);
@@ -770,7 +740,14 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   const renderDeviceItem = useCallback(
     ({ item, index }) => {
       const isSelected = selectedDevices.includes(item.id);
-      const hardwarePosition = devices.findIndex((d) => d.id === item.id) + 1;
+      // 优先使用设备的location字段，如果没有则使用索引+1
+      let hardwarePosition;
+      if (item.location) {
+        const parsedLocation = parseInt(item.location, 10);
+        hardwarePosition = isNaN(parsedLocation) ? (devices.findIndex((d) => d.id === item.id) + 1) : parsedLocation;
+      } else {
+        hardwarePosition = devices.findIndex((d) => d.id === item.id) + 1;
+      }
 
       const handlePress = () => {
         if (isSelectionMode) {
@@ -841,44 +818,11 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     });
   }, [navigation, loadDevices]);
 
-  // 处理器件架选择
-  const handleShelfSelect = useCallback(
-    (shelfId) => {
-      // 如果点击的是已选中的器件架，则取消选择，显示所有设备
-      if (shelfId === selectedShelf) {
-        dispatch({ type: 'SET_SELECTED_SHELF', payload: '' });
-      } else {
-        dispatch({ type: 'SET_SELECTED_SHELF', payload: shelfId });
-      }
-      dispatch({ type: 'SET_ADVANCED_SEARCH_MODE', payload: false });
-      dispatch({ type: 'SET_SHOW_SHELF_DROPDOWN', payload: false });
-      // 不再需要手动更新filteredDevices，memoizedFilteredDevices会自动根据selectedShelf重新计算
-    },
-    [selectedShelf, dispatch]
-  );
-
   return (
     <View style={styles.container}>
-      {/* 器件架选择 */}
+      {/* 标题和蓝牙连接状态 */}
       <View style={styles.shelfSelectorContainer}>
-        <TouchableOpacity
-          style={styles.shelfSelector}
-          onPress={() =>
-            dispatch({
-              type: 'SET_SHOW_SHELF_DROPDOWN',
-              payload: !showShelfDropdown,
-            })
-          }
-        >
-          <Text style={styles.shelfSelectorText}>
-            {selectedShelf
-              ? shelves.find((shelf) => shelf.id === selectedShelf)?.name
-              : '全部器件'}
-          </Text>
-          <Text style={styles.shelfSelectorArrow}>
-            {showShelfDropdown ? '▲' : '▼'}
-          </Text>
-        </TouchableOpacity>
+        <Text style={styles.shelfSelectorText}>全部器件</Text>
 
         {/* 蓝牙连接状态指示器 */}
         <View style={styles.connectionStatusContainer}>
@@ -896,33 +840,6 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
             </View>
           )}
         </View>
-
-        {/* 器件架下拉菜单 */}
-        {showShelfDropdown && (
-          <View style={styles.shelfDropdown}>
-            {shelves.map((shelf) => (
-              <TouchableOpacity
-                key={shelf.id}
-                style={[
-                  styles.shelfDropdownItem,
-                  selectedShelf === shelf.id &&
-                    styles.shelfDropdownItemSelected,
-                ]}
-                onPress={() => handleShelfSelect(shelf.id)}
-              >
-                <Text
-                  style={[
-                    styles.shelfDropdownItemText,
-                    selectedShelf === shelf.id &&
-                      styles.shelfDropdownItemTextSelected,
-                  ]}
-                >
-                  {shelf.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
       </View>
 
       {/* 搜索容器 */}
@@ -946,7 +863,6 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
               onPress={() => {
                 dispatch({ type: 'SET_SEARCH_QUERY', payload: '' });
                 dispatch({ type: 'RESET_ADVANCED_SEARCH' });
-                dispatch({ type: 'SET_SELECTED_SHELF', payload: '' });
               }}
             >
               <Text style={styles.clearSearchButtonText}>清除</Text>
@@ -1092,7 +1008,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
             <Text style={styles.emptySubtitle}>
               {searchQuery.trim()
                 ? '请尝试使用其他关键词搜索，或检查拼写是否正确'
-                : '当前器件架中还没有器件'}
+                : '请点击右上角按钮添加或导入器件'}
             </Text>
           </View>
         )}
