@@ -170,16 +170,16 @@ const AdminEditScreen = ({ navigation, route }) => {
     // 验证单位格式
     if (
       state.resistance.trim() &&
-      !/^\d+(\.\d+)?[kM]?Ω$/.test(state.resistance.trim())
+      !/^\d+(\.\d+)?[mμµukMGT]?[ΩR]?$/.test(state.resistance.trim())
     ) {
-      errors.resistance = '电阻格式不正确，例如：10Ω, 1kΩ';
+      errors.resistance = '电阻格式不正确，例如：10Ω, 1kΩ, 4.7R';
     }
 
     if (
       state.voltage.trim() &&
-      !/^\d+(\.\d+)?[kM]?V$/.test(state.voltage.trim())
+      !/^\d+(\.\d+)?[mμµukMGT]?V$/i.test(state.voltage.trim())
     ) {
-      errors.voltage = '电压格式不正确，例如：5V, 12V';
+      errors.voltage = '电压格式不正确，例如：5V, 12V, 3.3mV';
     }
 
     if (
@@ -191,28 +191,28 @@ const AdminEditScreen = ({ navigation, route }) => {
 
     if (
       state.inductance.trim() &&
-      !/^\d+(\.\d+)?[nµum]?H$/.test(state.inductance.trim())
+      !/^\d+(\.\d+)?[nμµum]?H$/i.test(state.inductance.trim())
     ) {
       errors.inductance = '电感格式不正确，例如：10mH, 1μH, 10uH';
     }
 
     if (
       state.current.trim() &&
-      !/^\d+(\.\d+)?[mµu]?[Aa]$/.test(state.current.trim())
+      !/^\d+(\.\d+)?[nμµumk]?A$/i.test(state.current.trim())
     ) {
       errors.current = '电流格式不正确，例如：1A, 500mA, 500uA';
     }
 
     if (
       state.power.trim() &&
-      !/^\d+(\.\d+)?[mkW]?[Ww]$/.test(state.power.trim())
+      !/^\d+(\.\d+)?[mμµuk]?W$/i.test(state.power.trim())
     ) {
       errors.power = '功率格式不正确，例如：1W, 500mW';
     }
 
     if (
       state.frequency.trim() &&
-      !/^\d+(\.\d+)?[kM]?Hz$/.test(state.frequency.trim())
+      !/^\d+(\.\d+)?[mμµukMGT]?Hz$/i.test(state.frequency.trim())
     ) {
       errors.frequency = '频率格式不正确，例如：16MHz, 50Hz';
     }
@@ -243,7 +243,7 @@ const AdminEditScreen = ({ navigation, route }) => {
           savedDevice = await StorageService.addDevice(deviceData);
           Alert.alert('成功', '器件上架成功');
         } catch (error) {
-          if (error.message && error.message.includes('器件编号')) {
+          if (error.message && error.message.includes('冲突')) {
             Alert.alert('错误', error.message);
             return;
           } else {
@@ -251,8 +251,17 @@ const AdminEditScreen = ({ navigation, route }) => {
           }
         }
       } else {
-        savedDevice = await StorageService.updateDevice(deviceData);
-        Alert.alert('成功', '器件更新成功');
+        try {
+          savedDevice = await StorageService.updateDevice(deviceData);
+          Alert.alert('成功', '器件更新成功');
+        } catch (error) {
+          if (error.message && error.message.includes('冲突')) {
+            Alert.alert('错误', error.message);
+            return;
+          } else {
+            throw error;
+          }
+        }
       }
 
       if (onSave) {

@@ -175,7 +175,17 @@ class StorageService {
     try {
       const devices = await this.getDevices();
 
-      // 生成有效的数字id，过滤掉NaN或无效值
+      if (device.location && device.shelfId === '1') {
+        const conflict = devices.find(
+          (d) => d.location === device.location && d.shelfId === '1'
+        );
+        if (conflict) {
+          throw new Error(
+            `位置 "${device.location}" 与已有器件 "${conflict.name}" 冲突`
+          );
+        }
+      }
+
       const existingIds = devices.map((d) =>
         typeof d.id === 'number' && !isNaN(d.id) ? d.id : 0
       );
@@ -185,7 +195,6 @@ class StorageService {
           ? device.id
           : maxId + 1;
 
-      // 创建新器件（自动生成ID和时间戳）
       const newDevice = {
         ...device,
         id: newId,
@@ -210,6 +219,21 @@ class StorageService {
   static async updateDevice(updatedDevice) {
     try {
       const devices = await this.getDevices();
+
+      if (updatedDevice.location && updatedDevice.shelfId === '1') {
+        const conflict = devices.find(
+          (d) =>
+            d.location === updatedDevice.location &&
+            d.shelfId === '1' &&
+            d.id !== updatedDevice.id
+        );
+        if (conflict) {
+          throw new Error(
+            `位置 "${updatedDevice.location}" 与已有器件 "${conflict.name}" 冲突`
+          );
+        }
+      }
+
       const index = devices.findIndex((d) => d.id === updatedDevice.id);
       if (index !== -1) {
         const updated = {
@@ -943,16 +967,52 @@ class StorageService {
         newDevices.push(device);
       }
 
-      // 批量添加新器件
-      for (const device of newDevices) {
-        await this.addDevice(device);
+      // 检查位置冲突
+      const locationMap = {};
+      const existingDevices = await this.getDevices();
+      for (const ed of existingDevices) {
+        if (ed.location && ed.shelfId === '1') {
+          locationMap[ed.location] = ed.name;
+        }
       }
+      for (const device of newDevices) {
+        if (device.location) {
+          if (locationMap[device.location]) {
+            errors.push(
+              `第 ${newDevices.indexOf(device) + 2} 行: 位置 "${device.location}" 与已有器件 "${locationMap[device.location]}" 冲突`
+            );
+          } else {
+            locationMap[device.location] = device.name;
+          }
+        }
+      }
+
+      // 批量添加新器件（跳过有位置冲突的器件）
+      for (const device of newDevices) {
+        const hasConflict =
+          device.location &&
+          errors.some((e) =>
+            e.includes(`位置 "${device.location}" 与已有器件`)
+          );
+        if (!hasConflict) {
+          await this.addDevice(device);
+        }
+      }
+
+      const importedCount = newDevices.filter((device) => {
+        const hasConflict =
+          device.location &&
+          errors.some((e) =>
+            e.includes(`位置 "${device.location}" 与已有器件`)
+          );
+        return !hasConflict;
+      }).length;
 
       return {
         success: true,
-        imported: newDevices.length,
+        imported: importedCount,
         errors,
-        total: newDevices.length + errors.length,
+        total: newDevices.length,
       };
     } catch (error) {
       logError(
