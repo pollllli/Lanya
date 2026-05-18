@@ -861,15 +861,15 @@ class StorageService {
       const columnMapping = {
         器件名称: 'name',
         名称: 'name',
-        器件编号: 'id',
-        编号: 'id',
+        器件编号: 'supplierId',
+        编号: 'supplierId',
         供应商编号: 'supplierId',
         封装: 'package',
         位号: 'position',
         备注: 'remark',
         值: 'value',
         数量: 'quantity',
-        型号: 'model',
+        型号: 'name',
         功能: 'function',
         分类: 'category',
         类别: 'category',
@@ -878,7 +878,6 @@ class StorageService {
         价格: 'price',
         物理位置: 'location',
         位置: 'location',
-        序号: 'location',
         物理序号: 'location',
         位置序号: 'location',
         datasheet: 'datasheet',
@@ -934,27 +933,21 @@ class StorageService {
 
         // 自动根据"值"字段填入对应的电气参数字段
         if (device.value) {
-          const value = device.value.trim();
-
-          if (value.includes('Ω')) {
-            device.resistance = value;
-          } else if (value.includes('F') && !value.includes('H')) {
-            device.capacitance = value;
-          } else if (
-            value.includes('H') &&
-            (value.includes('mH') ||
-              value.includes('μH') ||
-              value.includes('nH'))
-          ) {
-            device.inductance = value;
-          } else if (value.includes('V')) {
-            device.voltage = value;
-          } else if (value.includes('A')) {
-            device.current = value;
-          } else if (value.includes('W')) {
-            device.power = value;
-          } else if (value.includes('Hz')) {
-            device.frequency = value;
+          const v = device.value.trim();
+          if (/^\d+\.?\d*\s*[kKMmμuGg]?\s*[ΩΩRr]$/i.test(v) || /^\d+\.?\d*\s*[kKMmμuGg]?\s*ohm$/i.test(v)) {
+            device.resistance = v;
+          } else if (/^\d+\.?\d*\s*[kKMmGgT]?\s*[Hh]z$/i.test(v)) {
+            device.frequency = v;
+          } else if (/^\d+\.?\d*\s*[pPnNμuUmM]?\s*[Ff]$/i.test(v)) {
+            device.capacitance = v;
+          } else if (/^\d+\.?\d*\s*[nNμuUmM]?\s*[Hh]$/i.test(v)) {
+            device.inductance = v;
+          } else if (/^\d+\.?\d*\s*[mMkK]?\s*[Vv]$/i.test(v)) {
+            device.voltage = v;
+          } else if (/^\d+\.?\d*\s*[nNμuUmMkK]?\s*[Aa]$/i.test(v)) {
+            device.current = v;
+          } else if (/^\d+\.?\d*\s*[mMkK]?\s*[Ww]$/i.test(v)) {
+            device.power = v;
           }
         }
 

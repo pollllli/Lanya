@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useReducer } from 'react';
+import React, { useState, useEffect, useReducer, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,9 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as XLSX from 'xlsx';
@@ -19,12 +21,10 @@ import { logError, formatErrorMessage } from '../utils/ErrorHandler';
 const AdminEditScreen = ({ navigation, route }) => {
   const { device, isNew, onSave } = route.params || {};
 
-  // 初始状态
   const initialState = {
     id: device?.id || null,
     supplierId: device?.supplierId || '',
     name: device?.name || '',
-    function: device?.function || '',
     resistance: device?.resistance || '',
     voltage: device?.voltage || '',
     capacitance: device?.capacitance || '',
@@ -34,18 +34,12 @@ const AdminEditScreen = ({ navigation, route }) => {
     frequency: device?.frequency || '',
     category: device?.category || '',
     package: device?.package || '',
-    manufacturer: device?.manufacturer || '',
-    supplier: device?.supplier || '',
-    price: device?.price || '',
-    quantity: device?.quantity || '',
     location: device?.location || '',
-    datasheet: device?.datasheet || '',
     notes: device?.notes || '',
-    shelfId: device?.shelfId ? device.shelfId.toString() : '1', // 默认器件架，确保是字符串类型
+    shelfId: device?.shelfId ? device.shelfId.toString() : '1',
     errors: {},
   };
 
-  // Reducer函数
   const reducer = (state, action) => {
     switch (action.type) {
       case 'SET_FIELD':
@@ -72,13 +66,69 @@ const AdminEditScreen = ({ navigation, route }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [isLoading, setIsLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [showPositionPicker, setShowPositionPicker] = useState(false);
+  const [allDevices, setAllDevices] = useState([]);
+  const currentLitPosition = useRef(null);
 
-  // 处理Excel导入
+  const sendLightCommand = async (type, position) => {
+    if (!global.deviceConnection || !global.deviceConnection.handler) return;
+    try {
+      await global.deviceConnection.handler.sendCommand({ type, lightId: position });
+    } catch (error) {
+      console.log('灯光指令发送失败:', error);
+    }
+  };
+
+  const turnOffCurrentLight = async () => {
+    if (currentLitPosition.current !== null) {
+      await sendLightCommand('lightOff', currentLitPosition.current);
+      currentLitPosition.current = null;
+    }
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadAllDevices = async () => {
+        const devices = await StorageService.getDevices();
+        setAllDevices(devices);
+      };
+      loadAllDevices();
+      return () => {
+        turnOffCurrentLight();
+      };
+    }, [])
+  );
+
+  const getOccupiedPositions = () => {
+    const occupied = new Map();
+    allDevices
+      .filter((d) => d.shelfId === '1' && d.location && d.id !== state.id)
+      .forEach((d) => {
+        const pos = parseInt(d.location, 10);
+        if (!isNaN(pos)) {
+          occupied.set(pos, d.name || '未知');
+        }
+      });
+    return occupied;
+  };
+
+  const getAllPositions = () => {
+    const occupied = getOccupiedPositions();
+    const positions = [];
+    for (let i = 1; i <= 100; i++) {
+      positions.push({
+        position: i,
+        isOccupied: occupied.has(i),
+        deviceName: occupied.get(i) || '',
+      });
+    }
+    return positions;
+  };
+
   const handleImport = async () => {
     try {
       setIsImporting(true);
 
-      // 选择文件（只支持Excel）
       const result = await DocumentPicker.getDocumentAsync({
         type: [
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -94,7 +144,6 @@ const AdminEditScreen = ({ navigation, route }) => {
       const fileUri = result.assets[0].uri;
       const fileName = result.assets[0].name;
 
-      // 复制文件到缓存目录
       const cacheDir = FileSystem.cacheDirectory;
       const localUri = cacheDir + fileName;
 
@@ -103,12 +152,10 @@ const AdminEditScreen = ({ navigation, route }) => {
         to: localUri,
       });
 
-      // 读取文件内容
       const fileContent = await FileSystem.readAsStringAsync(localUri, {
         encoding: 'base64',
       });
 
-      // 解码base64并解析
       const binaryString = atob(fileContent);
       const workbook = XLSX.read(binaryString, { type: 'binary' });
       const sheetName = workbook.SheetNames[0];
@@ -121,10 +168,8 @@ const AdminEditScreen = ({ navigation, route }) => {
         return;
       }
 
-      // 转换为CSV格式
       const csvContent = XLSX.utils.sheet_to_csv(worksheet);
 
-      // 使用新的批量导入方法
       const importResult =
         await StorageService.importDevicesFromCSV(csvContent);
 
@@ -154,7 +199,6 @@ const AdminEditScreen = ({ navigation, route }) => {
     }
   };
 
-  // 验证表单
   const validateForm = () => {
     const errors = {};
 
@@ -162,12 +206,6 @@ const AdminEditScreen = ({ navigation, route }) => {
       errors.name = '请输入器件名称';
     }
 
-    // 功能描述不再是必填项
-    // if (!state.function.trim()) {
-    //   errors.function = '请输入功能描述';
-    // }
-
-    // 验证单位格式
     if (
       state.resistance.trim() &&
       !/^\d+(\.\d+)?[mμµukMGT]?[ΩR]?$/.test(state.resistance.trim())
@@ -220,7 +258,6 @@ const AdminEditScreen = ({ navigation, route }) => {
     return errors;
   };
 
-  // 处理保存
   const handleSave = async () => {
     const errors = validateForm();
 
@@ -284,21 +321,28 @@ const AdminEditScreen = ({ navigation, route }) => {
     >
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={true}>
         <View style={styles.formContainer}>
-          {/* 导入按钮 */}
-          <TouchableOpacity
-            style={[
-              styles.importButton,
-              isImporting && styles.importButtonDisabled,
-            ]}
-            onPress={handleImport}
-            disabled={isImporting}
-          >
-            <Text style={styles.importButtonText}>
-              {isImporting ? '导入中...' : '从Excel导入'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.importButtonContainer}>
+            <TouchableOpacity
+              style={[
+                styles.importButton,
+                isImporting && styles.importButtonDisabled,
+              ]}
+              onPress={handleImport}
+              disabled={isImporting}
+            >
+              <Text style={styles.importButtonText}>
+                {isImporting ? '导入中...' : '从Excel导入'}
+              </Text>
+            </TouchableOpacity>
 
-          {/* 基本信息 */}
+            <TouchableOpacity
+              style={[styles.importButton, styles.scanButton]}
+              onPress={() => navigation.navigate('ScanScreen')}
+            >
+              <Text style={styles.importButtonText}>扫码导入</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>基本信息</Text>
 
@@ -336,27 +380,6 @@ const AdminEditScreen = ({ navigation, route }) => {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>功能描述 *</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  state.errors.function && styles.inputError,
-                ]}
-                value={state.function}
-                onChangeText={(text) =>
-                  dispatch({
-                    type: 'SET_FIELD',
-                    payload: { field: 'function', value: text },
-                  })
-                }
-                placeholder="请输入功能描述"
-              />
-              {state.errors.function && (
-                <Text style={styles.errorText}>{state.errors.function}</Text>
-              )}
-            </View>
-
-            <View style={styles.formGroup}>
               <Text style={styles.label}>器件架</Text>
               <View style={styles.shelfSelectorSingle}>
                 <Text style={styles.shelfOptionTextSelected}>器件架（一）</Text>
@@ -364,7 +387,6 @@ const AdminEditScreen = ({ navigation, route }) => {
             </View>
           </View>
 
-          {/* 电气参数 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>电气参数</Text>
 
@@ -528,7 +550,6 @@ const AdminEditScreen = ({ navigation, route }) => {
             </View>
           </View>
 
-          {/* 其他信息 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>其他信息</Text>
 
@@ -564,98 +585,22 @@ const AdminEditScreen = ({ navigation, route }) => {
               </View>
             </View>
 
-            <View style={styles.row}>
-              <View style={[styles.formGroup, styles.halfWidth]}>
-                <Text style={styles.label}>制造商</Text>
-                <TextInput
-                  style={styles.input}
-                  value={state.manufacturer}
-                  onChangeText={(text) =>
-                    dispatch({
-                      type: 'SET_FIELD',
-                      payload: { field: 'manufacturer', value: text },
-                    })
-                  }
-                  placeholder="请输入制造商"
-                />
-              </View>
-
-              <View style={[styles.formGroup, styles.halfWidth]}>
-                <Text style={styles.label}>供应商</Text>
-                <TextInput
-                  style={styles.input}
-                  value={state.supplier}
-                  onChangeText={(text) =>
-                    dispatch({
-                      type: 'SET_FIELD',
-                      payload: { field: 'supplier', value: text },
-                    })
-                  }
-                  placeholder="请输入供应商"
-                />
-              </View>
-            </View>
-
-            <View style={styles.row}>
-              <View style={[styles.formGroup, styles.halfWidth]}>
-                <Text style={styles.label}>价格</Text>
-                <TextInput
-                  style={styles.input}
-                  value={state.price}
-                  onChangeText={(text) =>
-                    dispatch({
-                      type: 'SET_FIELD',
-                      payload: { field: 'price', value: text },
-                    })
-                  }
-                  placeholder="请输入价格"
-                />
-              </View>
-
-              <View style={[styles.formGroup, styles.halfWidth]}>
-                <Text style={styles.label}>数量</Text>
-                <TextInput
-                  style={styles.input}
-                  value={state.quantity}
-                  onChangeText={(text) =>
-                    dispatch({
-                      type: 'SET_FIELD',
-                      payload: { field: 'quantity', value: text },
-                    })
-                  }
-                  placeholder="请输入数量"
-                />
-              </View>
-            </View>
-
             <View style={styles.formGroup}>
               <Text style={styles.label}>位置</Text>
-              <TextInput
-                style={styles.input}
-                value={state.location}
-                onChangeText={(text) =>
-                  dispatch({
-                    type: 'SET_FIELD',
-                    payload: { field: 'location', value: text },
-                  })
-                }
-                placeholder="输入物理位置或序号（如：A1, B2, 1, 2, D1-5）"
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}> datasheet</Text>
-              <TextInput
-                style={styles.input}
-                value={state.datasheet}
-                onChangeText={(text) =>
-                  dispatch({
-                    type: 'SET_FIELD',
-                    payload: { field: 'datasheet', value: text },
-                  })
-                }
-                placeholder="请输入 datasheet 链接"
-              />
+              <TouchableOpacity
+                style={styles.positionButton}
+                onPress={() => {
+                  if (!global.deviceConnection) {
+                    Alert.alert('提示', '选择位置需要连接蓝牙设备以亮灯提示位置，请先在连接页面连接蓝牙设备');
+                    return;
+                  }
+                  setShowPositionPicker(true);
+                }}
+              >
+                <Text style={styles.positionButtonText}>
+                  {state.location ? `位置 ${state.location}` : '点击选择位置'}
+                </Text>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.formGroup}>
@@ -676,7 +621,6 @@ const AdminEditScreen = ({ navigation, route }) => {
             </View>
           </View>
 
-          {/* 保存按钮 */}
           <TouchableOpacity
             style={[styles.saveButton, isLoading && styles.saveButtonDisabled]}
             onPress={handleSave}
@@ -688,6 +632,82 @@ const AdminEditScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showPositionPicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowPositionPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>选择物理位置</Text>
+            <ScrollView style={styles.positionGrid}>
+              <View style={styles.positionGridInner}>
+                {getAllPositions().map((posInfo) => {
+                  const isCurrentPosition = state.location === String(posInfo.position);
+                  return (
+                    <TouchableOpacity
+                      key={posInfo.position}
+                      style={[
+                        styles.positionItem,
+                        posInfo.isOccupied ? styles.positionItemOccupied : styles.positionItemEmpty,
+                        isCurrentPosition && styles.positionItemCurrent,
+                      ]}
+                      onPress={async () => {
+                        if (posInfo.isOccupied && !isCurrentPosition) return;
+                        if (global.deviceConnection && global.deviceConnection.handler) {
+                          if (currentLitPosition.current !== null) {
+                            await sendLightCommand('lightOff', currentLitPosition.current);
+                            await new Promise(resolve => setTimeout(resolve, 300));
+                          }
+                          await sendLightCommand('lightOn', posInfo.position);
+                          currentLitPosition.current = posInfo.position;
+                        }
+                        dispatch({
+                          type: 'SET_FIELD',
+                          payload: { field: 'location', value: String(posInfo.position) },
+                        });
+                        setShowPositionPicker(false);
+                      }}
+                      activeOpacity={posInfo.isOccupied && !isCurrentPosition ? 1 : 0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.positionItemText,
+                          posInfo.isOccupied ? styles.positionItemTextOccupied : styles.positionItemTextEmpty,
+                          isCurrentPosition && styles.positionItemTextCurrent,
+                        ]}
+                      >
+                        {posInfo.position}
+                      </Text>
+                      {posInfo.isOccupied && !isCurrentPosition && (
+                        <Text style={styles.positionItemDeviceName} numberOfLines={1}>
+                          {posInfo.deviceName}
+                        </Text>
+                      )}
+                      {isCurrentPosition && (
+                        <Text style={styles.positionItemCurrentLabel} numberOfLines={1}>
+                          当前
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => {
+                turnOffCurrentLight();
+                setShowPositionPicker(false);
+              }}
+            >
+              <Text style={styles.modalCancelButtonText}>取消</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -702,6 +722,11 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     padding: 20,
+  },
+  importButtonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
   },
   section: {
     marginBottom: 30,
@@ -802,11 +827,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   importButton: {
+    flex: 1,
     backgroundColor: '#007AFF',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 20,
+  },
+  scanButton: {
+    backgroundColor: '#ff9800',
   },
   importButtonDisabled: {
     opacity: 0.5,
@@ -815,6 +843,102 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600',
+  },
+  positionButton: {
+    backgroundColor: '#f0f0f0',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  positionButtonText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    width: '85%',
+    maxHeight: '70%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  positionGrid: {
+    maxHeight: 350,
+  },
+  positionGridInner: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+  },
+  positionItem: {
+    width: 56,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+    margin: 4,
+    borderWidth: 1,
+  },
+  positionItemEmpty: {
+    backgroundColor: '#e3f2fd',
+    borderColor: '#bbdefb',
+  },
+  positionItemOccupied: {
+    backgroundColor: '#e8f5e9',
+    borderColor: '#a5d6a7',
+  },
+  positionItemCurrent: {
+    backgroundColor: '#fff3e0',
+    borderColor: '#ffcc80',
+    borderWidth: 2,
+  },
+  positionItemText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  positionItemTextEmpty: {
+    color: '#1976d2',
+  },
+  positionItemTextOccupied: {
+    color: '#2e7d32',
+  },
+  positionItemTextCurrent: {
+    color: '#e65100',
+  },
+  positionItemDeviceName: {
+    fontSize: 8,
+    color: '#4caf50',
+    marginTop: 1,
+  },
+  positionItemCurrentLabel: {
+    fontSize: 8,
+    color: '#ff9800',
+    marginTop: 1,
+  },
+  modalCancelButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#8E8E93',
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

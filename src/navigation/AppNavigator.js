@@ -13,6 +13,7 @@ import AdminEditScreen from '../screens/AdminEditScreen';
 import BOMScreen from '../screens/BOMScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ConnectionScreen from '../screens/ConnectionScreen';
+import ScanScreen from '../screens/ScanScreen';
 import { useUser } from '../context/UserContext';
 
 const Stack = createStackNavigator();
@@ -162,6 +163,14 @@ const AppNavigator = () => {
             title: route.params?.isNew ? '上架器件' : '编辑器件',
             headerBackTitle: '返回',
           })}
+        />
+        <Stack.Screen
+          name="ScanScreen"
+          component={ScanScreen}
+          options={{
+            title: '扫码导入',
+            headerBackTitle: '返回',
+          }}
         />
       </Stack.Navigator>
     </NavigationContainer>

@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import CommandBuilder from '../services/CommandBuilder';
 import StorageService from '../services/StorageService';
 
 const DeviceDetailScreen = ({ navigation, route }) => {
@@ -46,31 +45,11 @@ const DeviceDetailScreen = ({ navigation, route }) => {
         lightId: position,
       });
 
-      const commandBuilder = new CommandBuilder();
-      const commandFrame = commandBuilder.buildLightOnCommand(position);
-      const commandFrameHex = commandFrame
-        .map((byte) => byte.toString(16).padStart(2, '0'))
-        .join(' ');
-
-      let responseFrame = [];
-      if (response && response.cmd) {
-        responseFrame = [0x55, 0xaa, response.cmd, 0x02, 0x00, 0x01];
-        const responseCrc = commandBuilder.calculateCRC8(responseFrame);
-        responseFrame.push(responseCrc);
-      } else if (response && response.success) {
-        responseFrame = [0x55, 0xaa, 0x81, 0x02, 0x00, 0x01];
-        const responseCrc = commandBuilder.calculateCRC8(responseFrame);
-        responseFrame.push(responseCrc);
+      if (response.success) {
+        // no popup
+      } else {
+        Alert.alert('错误', `亮灯失败: ${response.message}`);
       }
-      const responseFrameHex = responseFrame
-        .map((byte) => byte.toString(16).padStart(2, '0'))
-        .join(' ');
-
-      Alert.alert(
-        '指令发送成功',
-        `已向下位机发送指令，请求编号为 ${device.supplierId || device.id} 的器件\n对应位置灯已亮起\n位置: ${position}\n\n发送帧: ${commandFrameHex}\n\n响应帧: ${responseFrameHex}`,
-        [{ text: '确定' }]
-      );
     } catch (error) {
       console.error('发送指令失败:', error);
       Alert.alert('错误', `发送指令失败: ${error.message || '未知错误'}`);
@@ -95,31 +74,11 @@ const DeviceDetailScreen = ({ navigation, route }) => {
         lightId: position,
       });
 
-      const commandBuilder = new CommandBuilder();
-      const commandFrame = commandBuilder.buildLightOffCommand(position);
-      const commandFrameHex = commandFrame
-        .map((byte) => byte.toString(16).padStart(2, '0'))
-        .join(' ');
-
-      let responseFrame = [];
-      if (response && response.cmd) {
-        responseFrame = [0x55, 0xaa, response.cmd, 0x02, 0x00, 0x01];
-        const responseCrc = commandBuilder.calculateCRC8(responseFrame);
-        responseFrame.push(responseCrc);
-      } else if (response && response.success) {
-        responseFrame = [0x55, 0xaa, 0x82, 0x02, 0x00, 0x01];
-        const responseCrc = commandBuilder.calculateCRC8(responseFrame);
-        responseFrame.push(responseCrc);
+      if (response.success) {
+        // no popup
+      } else {
+        Alert.alert('错误', `取出失败: ${response.message}`);
       }
-      const responseFrameHex = responseFrame
-        .map((byte) => byte.toString(16).padStart(2, '0'))
-        .join(' ');
-
-      Alert.alert(
-        '指令发送成功',
-        `已向下位机发送指令，取出编号为 ${device.supplierId || device.id} 的器件\n对应位置灯已熄灭\n位置: ${position}\n\n发送帧: ${commandFrameHex}\n\n响应帧: ${responseFrameHex}`,
-        [{ text: '确定' }]
-      );
     } catch (error) {
       console.error('发送指令失败:', error);
       Alert.alert('错误', '发送指令失败，请检查设备连接');
@@ -137,7 +96,6 @@ const DeviceDetailScreen = ({ navigation, route }) => {
           </Text>
         </View>
         <Text style={styles.deviceName}>{device.name}</Text>
-        <Text style={styles.deviceFunction}>{device.function}</Text>
 
         <View style={styles.specContainer}>
           {device.resistance && (

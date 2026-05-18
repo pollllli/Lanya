@@ -21,6 +21,7 @@ import {
 import StorageService from '../services/StorageService';
 import { logError, formatErrorMessage } from '../utils/ErrorHandler';
 import { generateSearchSuggestions, filterDevices } from '../utils/SearchUtils';
+import { MaterialIcons } from '@expo/vector-icons';
 
 const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   // 初始状态
@@ -50,6 +51,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     successMessage: '',
     isConnected: false,
     isLoading: false,
+    litDeviceIds: [],
   };
 
   // Reducer函数
@@ -117,6 +119,19 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
           ...state,
           isLoading: action.payload,
         };
+      case 'SET_LIT_DEVICE_IDS':
+        return {
+          ...state,
+          litDeviceIds: action.payload,
+        };
+      case 'TOGGLE_LIT_DEVICE':
+        const isLit = state.litDeviceIds.includes(action.payload);
+        return {
+          ...state,
+          litDeviceIds: isLit
+            ? state.litDeviceIds.filter((id) => id !== action.payload)
+            : [...state.litDeviceIds, action.payload],
+        };
       default:
         return state;
     }
@@ -143,6 +158,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     successMessage,
     isConnected,
     isLoading,
+    litDeviceIds,
   } = state;
 
   useEffect(() => {
@@ -229,7 +245,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
           dispatch({ type: 'SET_FILTERED_DEVICES', payload: filtered });
         }
       }, 100);
-    }, [searchQuery, advancedSearchParams, isAdvancedSearchMode, devices, loadDevices, dispatch])
+    }, [searchQuery, advancedSearchParams, isAdvancedSearchMode, loadDevices, dispatch])
   );
 
   // 定期检查连接状态，确保指示器实时更新
@@ -399,7 +415,15 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
         } else {
           // 如果存储中有数据，使用存储的数据
           console.log('从存储加载器件数据，共', storedDevices.length, '个器件');
-          dispatch({ type: 'SET_DEVICES', payload: storedDevices });
+          const sortedDevices = [...storedDevices].sort((a, b) => {
+            const posA = a.location ? parseInt(a.location, 10) : 9999;
+            const posB = b.location ? parseInt(b.location, 10) : 9999;
+            if (isNaN(posA) && isNaN(posB)) return 0;
+            if (isNaN(posA)) return 1;
+            if (isNaN(posB)) return -1;
+            return posA - posB;
+          });
+          dispatch({ type: 'SET_DEVICES', payload: sortedDevices });
         }
       }
     } catch (error) {
@@ -411,46 +435,52 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
     }
   }, [dispatch]);
 
-  // 请求器件（点亮对应灯）
-  const requestDevice = useCallback(
+  const handleDeviceTagPress = useCallback(
     async (device, hardwarePosition) => {
       try {
-        // 检查是否有蓝牙连接
         if (!isConnected || !global.deviceConnection) {
           Alert.alert('提示', '请先在连接页面连接蓝牙设备');
-          // 更新连接状态为未连接
           dispatch({ type: 'SET_CONNECTED', payload: false });
           return;
         }
 
-        // 构建请求命令 - 使用硬件位置作为灯ID
-        const requestCommand = {
-          type: 'lightOn',
-          lightId: hardwarePosition,
-        };
-
-        // 使用全局蓝牙连接发送命令
         const { handler } = global.deviceConnection;
-        const response = await handler.sendCommand(requestCommand);
+        const isLit = litDeviceIds.includes(device.id);
 
-        if (response.success) {
-          Alert.alert(
-            '成功',
-            `已发送器件请求: ${device.name} (位置: ${hardwarePosition})`
-          );
-          showSuccessMessage(
-            `已请求器件: ${device.name} (位置: ${hardwarePosition})`
-          );
+        if (isLit) {
+          const response = await handler.sendCommand({
+            type: 'lightOff',
+            lightId: hardwarePosition,
+          });
+
+          if (response.success) {
+            dispatch({
+              type: 'SET_LIT_DEVICE_IDS',
+              payload: litDeviceIds.filter((id) => id !== device.id),
+            });
+            showSuccessMessage(`已熄灯: ${device.name}`);
+          } else {
+            Alert.alert('错误', `熄灯失败: ${response.message}`);
+          }
         } else {
-          Alert.alert('错误', `请求器件失败: ${response.message}`);
+          const response = await handler.sendCommand({
+            type: 'lightOn',
+            lightId: hardwarePosition,
+          });
+
+          if (response.success) {
+            dispatch({ type: 'TOGGLE_LIT_DEVICE', payload: device.id });
+            showSuccessMessage(`已亮灯: ${device.name} (位置: ${hardwarePosition})`);
+          } else {
+            Alert.alert('错误', `亮灯失败: ${response.message}`);
+          }
         }
       } catch (error) {
-        logError('请求器件失败', error, 'DeviceListScreen.requestDevice');
-        const errorMessage = `请求器件失败: ${formatErrorMessage(error)}`;
-        Alert.alert('错误', errorMessage);
+        logError('器件操作失败', error, 'DeviceListScreen.handleDeviceTagPress');
+        Alert.alert('错误', `操作失败: ${formatErrorMessage(error)}`);
       }
     },
-    [isConnected, showSuccessMessage]
+    [isConnected, litDeviceIds, devices, showSuccessMessage]
   );
 
   // 使用 useMemo 缓存过滤后的设备列表
@@ -487,8 +517,9 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       });
 
       if (response.success) {
-        Alert.alert('成功', '已点亮所有灯');
         showSuccessMessage('已点亮所有灯');
+        const allDeviceIds = devices.map(d => d.id);
+        dispatch({ type: 'SET_LIT_DEVICE_IDS', payload: allDeviceIds });
       } else {
         Alert.alert('错误', `操作失败: ${response.message}`);
       }
@@ -518,8 +549,8 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       });
 
       if (response.success) {
-        Alert.alert('成功', '已熄灭所有灯');
         showSuccessMessage('已熄灭所有灯');
+        dispatch({ type: 'SET_LIT_DEVICE_IDS', payload: [] });
       } else {
         Alert.alert('错误', `操作失败: ${response.message}`);
       }
@@ -532,13 +563,6 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       Alert.alert('错误', '发送命令失败，请检查设备连接');
     }
   }, [isConnected, showSuccessMessage]);
-
-  const handleDevicePress = useCallback(
-    (device) => {
-      navigation.navigate('DeviceDetail', { device, isAdmin });
-    },
-    [navigation, isAdmin]
-  );
 
   // 单个器件删除
   const handleDeleteDevice = useCallback(
@@ -740,7 +764,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
   const renderDeviceItem = useCallback(
     ({ item, index }) => {
       const isSelected = selectedDevices.includes(item.id);
-      // 优先使用设备的location字段，如果没有则使用索引+1
+      const isLit = litDeviceIds.includes(item.id);
       let hardwarePosition;
       if (item.location) {
         const parsedLocation = parseInt(item.location, 10);
@@ -753,58 +777,53 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
         if (isSelectionMode) {
           toggleDeviceSelection(item.id);
         } else {
-          handleDevicePress(item);
+          handleDeviceTagPress(item, hardwarePosition);
         }
+      };
+
+      const handleEdit = () => {
+        navigation.navigate('AdminEdit', {
+          device: item,
+          isNew: false,
+          onSave: loadDevices,
+        });
       };
 
       return (
         <TouchableOpacity
-          style={[styles.deviceTag, isSelected && styles.selectedDeviceTag]}
+          style={[
+            styles.deviceTag,
+            isSelected && styles.selectedDeviceTag,
+            isLit && styles.litDeviceTag,
+          ]}
           onPress={handlePress}
         >
-          {isSelectionMode && (
-            <View style={styles.checkboxContainer}>
-              <View
-                style={[styles.checkbox, isSelected && styles.checkboxSelected]}
-              >
-                {isSelected && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-            </View>
-          )}
+          <TouchableOpacity style={styles.editIcon} onPress={handleEdit}>
+            <MaterialIcons name="edit" size={18} color="#999" />
+          </TouchableOpacity>
           <View style={styles.deviceTagContent}>
-            <View style={styles.tagRow}>
-              <Text style={styles.deviceTagId}>
-                {item.supplierId || item.id || 'N/A'}
-              </Text>
-              <Text style={styles.deviceTagCategory}>
-                {item.category || '未分类'}
-              </Text>
-            </View>
-            <View style={styles.tagNameContainer}>
-              <Text style={styles.deviceTagName}>{item.name || '未命名'}</Text>
-            </View>
-            <View style={styles.tagPackageContainer}>
-              <Text style={styles.deviceTagPackage}>
-                {item.package || 'N/A'}
-              </Text>
-            </View>
-            {/* 请求器件按钮 */}
-            <TouchableOpacity
-              style={styles.requestButton}
-              onPress={() => requestDevice(item, hardwarePosition)}
-            >
-              <Text style={styles.requestButtonText}>请求器件</Text>
-            </TouchableOpacity>
+            <Text style={styles.deviceTagName}>{item.name || '未命名'}</Text>
+            <Text style={styles.deviceTagPackage}>
+              {item.package || 'N/A'}
+            </Text>
           </View>
+          <Text style={styles.deviceTagId}>
+            {item.supplierId || item.id || 'N/A'}
+          </Text>
+          <Text style={styles.deviceTagLocation}>
+            位置 {hardwarePosition}
+          </Text>
         </TouchableOpacity>
       );
     },
     [
       selectedDevices,
       isSelectionMode,
+      litDeviceIds,
       toggleDeviceSelection,
-      handleDevicePress,
-      requestDevice,
+      handleDeviceTagPress,
+      navigation,
+      loadDevices,
       devices,
     ]
   );
@@ -1329,7 +1348,7 @@ const styles = StyleSheet.create({
   },
   shelfDropdownItemTextSelected: {
     color: '#1976d2',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   // 搜索容器样式
   searchContainer: {
@@ -1569,39 +1588,48 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#1976d2',
   },
+  litDeviceTag: {
+    backgroundColor: '#e8f5e9',
+    borderWidth: 2,
+    borderColor: '#81c784',
+  },
+  editIcon: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 10,
+    padding: 4,
+  },
   deviceTagContent: {
     flex: 1,
     padding: 16,
-  },
-  tagRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
-  },
-  tagNameContainer: {
-    marginBottom: 12,
-  },
-  tagPackageContainer: {
-    marginBottom: 16,
   },
   deviceTagId: {
-    fontSize: 16,
+    position: 'absolute',
+    top: 8,
+    left: 12,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#000',
-  },
-  deviceTagCategory: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
+    color: '#1976d2',
   },
   deviceTagName: {
-    fontSize: 20,
+    fontSize: 21,
     fontWeight: 'bold',
     color: '#000',
+    textAlign: 'center',
+  },
+  deviceTagLocation: {
+    position: 'absolute',
+    bottom: 8,
+    right: 12,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64b5f6',
   },
   deviceTagPackage: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
     color: '#000',
   },
@@ -1718,28 +1746,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  // 请求器件按钮样式
-  requestButton: {
-    backgroundColor: '#4caf50',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  requestButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
   },
   // 控制所有灯按钮样式
   controlAllButtonsContainer: {
