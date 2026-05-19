@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import StorageService from '../services/StorageService';
 import { logError, formatErrorMessage } from '../utils/ErrorHandler';
 import { useUser } from '../context/UserContext';
@@ -165,11 +166,19 @@ const ProfileScreen = ({ navigation, route }) => {
 
       await FileSystem.writeAsStringAsync(fileUri, backupJson);
 
-      Alert.alert(
-        '数据备份',
-        `备份成功！\n\n文件: ${fileName}\n导出时间: ${backupData.exportDate}\n\n备份内容已保存，包含所有器件、用户和BOM数据。\n\n您可以在文件管理器中找到这个文件并分享给其他设备。`,
-        [{ text: '确定' }]
-      );
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'application/json',
+          dialogTitle: '保存备份数据',
+          UTI: 'public.json',
+        });
+      } else {
+        Alert.alert(
+          '数据备份',
+          `备份成功！\n\n文件: ${fileName}\n导出时间: ${backupData.exportDate}`,
+          [{ text: '确定' }]
+        );
+      }
     } catch (error) {
       logError('备份数据失败', error, 'ProfileScreen.handleBackupData');
       Alert.alert('错误', `备份数据失败: ${error.message || '请重试'}`);

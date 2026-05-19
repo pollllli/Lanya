@@ -1,15 +1,51 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Modal, Alert } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Audio } from 'expo-av';
 import StorageService from '../services/StorageService';
 
 const ScanScreen = ({ navigation, route }) => {
   const [permission, requestPermission] = useCameraPermissions();
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [currentDeviceInfo, setCurrentDeviceInfo] = useState(null);
+  const [currentEmptyPosition, setCurrentEmptyPosition] = useState(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
-  const scanningRef = useRef(true);
+  const scanningRef = useRef(false);
   const currentLitPosition = useRef(null);
+  const soundRef = useRef(null);
+
+  useEffect(() => {
+    const loadSound = async () => {
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          require('../../assets/scan_beep.wav')
+        );
+        soundRef.current = sound;
+        scanningRef.current = true;
+      } catch (error) {
+        console.log('加载音效失败:', error);
+        scanningRef.current = true;
+      }
+    };
+    loadSound();
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
+
+  const playBeep = async () => {
+    try {
+      if (soundRef.current) {
+        await soundRef.current.replayAsync();
+      }
+    } catch (error) {
+      console.log('播放音效失败:', error);
+    }
+  };
 
   const showToast = (message) => {
     setToastMessage(message);
@@ -87,6 +123,8 @@ const ScanScreen = ({ navigation, route }) => {
 
   const handleBarCodeScanned = async ({ type, data }) => {
     if (!scanningRef.current) return;
+    if (showConfirmModal) return;
+
     scanningRef.current = false;
 
     const parsed = parseQRCode(data);
@@ -95,23 +133,21 @@ const ScanScreen = ({ navigation, route }) => {
 
     if (!supplierId) {
       showToast('未识别到供应商编号');
-      setTimeout(() => { scanningRef.current = true; }, 1500);
+      scanningRef.current = true;
+      return;
+    }
+
+    if (!global.deviceConnection) {
+      Alert.alert('提示', '蓝牙未连接，无法上架器件。请先在连接页面连接蓝牙设备。');
+      scanningRef.current = true;
       return;
     }
 
     try {
-      const existingDevices = await StorageService.getDevices();
-      const duplicate = existingDevices.find(d => d.supplierId === supplierId);
-      if (duplicate) {
-        showToast(`供应商编号 ${supplierId} 已存在，位置 ${duplicate.location || '未分配'}`);
-      setTimeout(() => { scanningRef.current = true; }, 1500);
-      return;
-      }
-
       const emptyPosition = await findFirstEmptyPosition();
       if (emptyPosition === null) {
         showToast('器件架已满，没有空位置');
-        setTimeout(() => { scanningRef.current = true; }, 1500);
+        scanningRef.current = true;
         return;
       }
 
@@ -136,6 +172,8 @@ const ScanScreen = ({ navigation, route }) => {
 
       await StorageService.addDevice(newDevice);
 
+      playBeep();
+
       if (currentLitPosition.current !== null) {
         await sendLightCommand('lightOff', currentLitPosition.current);
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -143,15 +181,28 @@ const ScanScreen = ({ navigation, route }) => {
       await sendLightCommand('lightOn', emptyPosition);
       currentLitPosition.current = emptyPosition;
 
-      const displayName = deviceName || supplierId;
-      showToast(`保存器件 ${displayName} 到位置 ${emptyPosition}`);
+      setCurrentDeviceInfo({ name: deviceName, supplierId });
+      setCurrentEmptyPosition(emptyPosition);
+      setShowConfirmModal(true);
     } catch (error) {
       showToast('保存失败');
+      scanningRef.current = true;
     }
+  };
 
+  const handleConfirm = async () => {
+    if (currentLitPosition.current !== null) {
+      await sendLightCommand('lightOff', currentLitPosition.current);
+      currentLitPosition.current = null;
+    }
+    setShowConfirmModal(false);
+    setCurrentDeviceInfo(null);
+    setCurrentEmptyPosition(null);
+    scanningRef.current = false;
+    showToast('已确认，请移开摄像头');
     setTimeout(() => {
       scanningRef.current = true;
-    }, 1500);
+    }, 2000);
   };
 
   const handleCancel = () => {
@@ -216,6 +267,36 @@ const ScanScreen = ({ navigation, route }) => {
           <Text style={styles.toastText}>{toastMessage}</Text>
         </Animated.View>
       )}
+
+      <Modal
+        visible={showConfirmModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>上架成功</Text>
+            <View style={styles.modalBody}>
+              <Text style={styles.modalText}>
+                器件名称：{currentDeviceInfo?.name || '未命名'}
+              </Text>
+              <Text style={styles.modalText}>
+                供应商编号：{currentDeviceInfo?.supplierId || 'N/A'}
+              </Text>
+              <Text style={styles.modalText}>
+                上架位置：{currentEmptyPosition || 'N/A'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.confirmButton}
+              onPress={handleConfirm}
+            >
+              <Text style={styles.confirmButtonText}>确认</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -365,6 +446,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 300,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 24,
+    width: '80%',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 20,
+  },
+  modalBody: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  modalText: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  confirmButton: {
+    backgroundColor: '#4caf50',
+    paddingVertical: 12,
+    paddingHorizontal: 48,
+    borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
   },
 });
 
