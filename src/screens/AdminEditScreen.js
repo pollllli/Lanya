@@ -34,7 +34,7 @@ const AdminEditScreen = ({ navigation, route }) => {
     frequency: device?.frequency || '',
     category: device?.category || '',
     package: device?.package || '',
-    location: device?.location || '',
+    location: device?.location != null && device?.location !== '' ? String(device.location) : '',
     notes: device?.notes || '',
     shelfId: device?.shelfId ? device.shelfId.toString() : '1',
     errors: {},
@@ -68,6 +68,7 @@ const AdminEditScreen = ({ navigation, route }) => {
   const [isImporting, setIsImporting] = useState(false);
   const [showPositionPicker, setShowPositionPicker] = useState(false);
   const [allDevices, setAllDevices] = useState([]);
+  const [expandedBank, setExpandedBank] = useState(null);
   const currentLitPosition = useRef(null);
 
   const sendLightCommand = async (type, position) => {
@@ -102,7 +103,7 @@ const AdminEditScreen = ({ navigation, route }) => {
   const getOccupiedPositions = () => {
     const occupied = new Map();
     allDevices
-      .filter((d) => d.shelfId === '1' && d.location && d.id !== state.id)
+      .filter((d) => d.shelfId === '1' && d.location != null && d.location !== '' && d.id !== state.id)
       .forEach((d) => {
         const pos = parseInt(d.location, 10);
         if (!isNaN(pos)) {
@@ -115,7 +116,7 @@ const AdminEditScreen = ({ navigation, route }) => {
   const getAllPositions = () => {
     const occupied = getOccupiedPositions();
     const positions = [];
-    for (let i = 1; i <= 100; i++) {
+    for (let i = 0; i < 90; i++) {
       positions.push({
         position: i,
         isOccupied: occupied.has(i),
@@ -202,8 +203,8 @@ const AdminEditScreen = ({ navigation, route }) => {
   const validateForm = () => {
     const errors = {};
 
-    if (!state.name.trim()) {
-      errors.name = '请输入器件名称';
+    if (!state.name.trim() && !state.supplierId.trim()) {
+      errors.name = '器件名称和供应商编号至少填写一项';
     }
 
     if (
@@ -598,7 +599,7 @@ const AdminEditScreen = ({ navigation, route }) => {
                 }}
               >
                 <Text style={styles.positionButtonText}>
-                  {state.location ? `位置 ${state.location}` : '点击选择位置'}
+                  {state.location != null && state.location !== '' ? `位置 ${state.location}` : '点击选择位置'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -643,58 +644,77 @@ const AdminEditScreen = ({ navigation, route }) => {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>选择物理位置</Text>
             <ScrollView style={styles.positionGrid}>
-              <View style={styles.positionGridInner}>
-                {getAllPositions().map((posInfo) => {
-                  const isCurrentPosition = state.location === String(posInfo.position);
-                  return (
-                    <TouchableOpacity
-                      key={posInfo.position}
-                      style={[
-                        styles.positionItem,
-                        posInfo.isOccupied ? styles.positionItemOccupied : styles.positionItemEmpty,
-                        isCurrentPosition && styles.positionItemCurrent,
-                      ]}
-                      onPress={async () => {
-                        if (posInfo.isOccupied && !isCurrentPosition) return;
-                        if (global.deviceConnection && global.deviceConnection.handler) {
-                          if (currentLitPosition.current !== null) {
-                            await sendLightCommand('lightOff', currentLitPosition.current);
-                            await new Promise(resolve => setTimeout(resolve, 300));
-                          }
-                          await sendLightCommand('lightOn', posInfo.position);
-                          currentLitPosition.current = posInfo.position;
-                        }
-                        dispatch({
-                          type: 'SET_FIELD',
-                          payload: { field: 'location', value: String(posInfo.position) },
-                        });
-                        setShowPositionPicker(false);
-                      }}
-                      activeOpacity={posInfo.isOccupied && !isCurrentPosition ? 1 : 0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.positionItemText,
-                          posInfo.isOccupied ? styles.positionItemTextOccupied : styles.positionItemTextEmpty,
-                          isCurrentPosition && styles.positionItemTextCurrent,
-                        ]}
-                      >
-                        {posInfo.position}
-                      </Text>
-                      {posInfo.isOccupied && !isCurrentPosition && (
-                        <Text style={styles.positionItemDeviceName} numberOfLines={1}>
-                          {posInfo.deviceName}
-                        </Text>
-                      )}
-                      {isCurrentPosition && (
-                        <Text style={styles.positionItemCurrentLabel} numberOfLines={1}>
-                          当前
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              {Array.from({ length: 3 }, (_, bankIndex) => (
+                <View key={bankIndex}>
+                  <TouchableOpacity
+                    style={styles.positionBankHeader}
+                    onPress={() => setExpandedBank(expandedBank === bankIndex ? null : bankIndex)}
+                  >
+                    <Text style={styles.positionBankHeaderText}>
+                      第{bankIndex + 1}排（位置 {bankIndex * 30}-{bankIndex * 30 + 29}）
+                    </Text>
+                    <Text style={styles.positionBankHeaderArrow}>
+                      {expandedBank === bankIndex ? '▲' : '▼'}
+                    </Text>
+                  </TouchableOpacity>
+                  {expandedBank === bankIndex && (
+                    <View style={styles.positionGridInner}>
+                      {getAllPositions()
+                        .slice(bankIndex * 30, (bankIndex + 1) * 30)
+                        .map((posInfo) => {
+                          const isCurrentPosition = state.location === String(posInfo.position);
+                          return (
+                            <TouchableOpacity
+                              key={posInfo.position}
+                              style={[
+                                styles.positionItem,
+                                posInfo.isOccupied ? styles.positionItemOccupied : styles.positionItemEmpty,
+                                isCurrentPosition && styles.positionItemCurrent,
+                              ]}
+                              onPress={async () => {
+                                if (posInfo.isOccupied && !isCurrentPosition) return;
+                                if (global.deviceConnection && global.deviceConnection.handler) {
+                                  if (currentLitPosition.current !== null) {
+                                    await sendLightCommand('lightOff', currentLitPosition.current);
+                                    await new Promise(resolve => setTimeout(resolve, 300));
+                                  }
+                                  await sendLightCommand('lightOn', posInfo.position);
+                                  currentLitPosition.current = posInfo.position;
+                                }
+                                dispatch({
+                                  type: 'SET_FIELD',
+                                  payload: { field: 'location', value: String(posInfo.position) },
+                                });
+                                setShowPositionPicker(false);
+                              }}
+                              activeOpacity={posInfo.isOccupied && !isCurrentPosition ? 1 : 0.7}
+                            >
+                              <Text
+                                style={[
+                                  styles.positionItemText,
+                                  posInfo.isOccupied ? styles.positionItemTextOccupied : styles.positionItemTextEmpty,
+                                  isCurrentPosition && styles.positionItemTextCurrent,
+                                ]}
+                              >
+                                {posInfo.position}
+                              </Text>
+                              {posInfo.isOccupied && !isCurrentPosition && (
+                                <Text style={styles.positionItemDeviceName} numberOfLines={1}>
+                                  {posInfo.deviceName}
+                                </Text>
+                              )}
+                              {isCurrentPosition && (
+                                <Text style={styles.positionItemCurrentLabel} numberOfLines={1}>
+                                  当前
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                    </View>
+                  )}
+                </View>
+              ))}
             </ScrollView>
             <TouchableOpacity
               style={styles.modalCancelButton}
@@ -878,18 +898,39 @@ const styles = StyleSheet.create({
   positionGrid: {
     maxHeight: 350,
   },
+  positionBankHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  positionBankHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  positionBankHeaderArrow: {
+    fontSize: 12,
+    color: '#666',
+  },
   positionGridInner: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
   },
   positionItem: {
-    width: 56,
-    height: 52,
+    width: '18%',
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 8,
-    margin: 4,
+    borderRadius: 6,
+    marginHorizontal: '1%',
+    marginBottom: 6,
     borderWidth: 1,
   },
   positionItemEmpty: {

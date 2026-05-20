@@ -88,14 +88,14 @@ const ScanScreen = ({ navigation, route }) => {
     const devices = await StorageService.getDevices();
     const occupiedPositions = new Set();
     devices.forEach(d => {
-      if (d.shelfId === '1' && d.location) {
+      if (d.shelfId === '1' && d.location != null && d.location !== '') {
         const pos = parseInt(d.location, 10);
         if (!isNaN(pos)) {
           occupiedPositions.add(pos);
         }
       }
     });
-    for (let i = 1; i <= 100; i++) {
+    for (let i = 0; i < 90; i++) {
       if (!occupiedPositions.has(i)) {
         return i;
       }

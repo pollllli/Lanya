@@ -417,10 +417,9 @@ class BluetoothHandler {
       let frame;
       if (command.type === 'lightOn') {
         // 点亮指定灯
-        frame = this.commandBuilder.buildLightOnCommand(command.lightId || 1);
+        frame = this.commandBuilder.buildLightOnCommand(command.lightId != null ? command.lightId : 1);
       } else if (command.type === 'lightOff') {
-        // 熄灭指定灯
-        frame = this.commandBuilder.buildLightOffCommand(command.lightId || 1);
+        frame = this.commandBuilder.buildLightOffCommand(command.lightId != null ? command.lightId : 1);
       } else if (command.type === 'heartbeat') {
         // 心跳命令
         frame = this.commandBuilder.buildHeartbeatCommand();

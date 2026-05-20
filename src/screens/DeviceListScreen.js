@@ -416,8 +416,8 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
           // 如果存储中有数据，使用存储的数据
           console.log('从存储加载器件数据，共', storedDevices.length, '个器件');
           const sortedDevices = [...storedDevices].sort((a, b) => {
-            const posA = a.location ? parseInt(a.location, 10) : 9999;
-            const posB = b.location ? parseInt(b.location, 10) : 9999;
+            const posA = (a.location != null && a.location !== '') ? parseInt(a.location, 10) : 9999;
+            const posB = (b.location != null && b.location !== '') ? parseInt(b.location, 10) : 9999;
             if (isNaN(posA) && isNaN(posB)) return 0;
             if (isNaN(posA)) return 1;
             if (isNaN(posB)) return -1;
@@ -766,7 +766,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
       const isSelected = selectedDevices.includes(item.id);
       const isLit = litDeviceIds.includes(item.id);
       let hardwarePosition;
-      if (item.location) {
+      if (item.location != null && item.location !== '') {
         const parsedLocation = parseInt(item.location, 10);
         hardwarePosition = isNaN(parsedLocation) ? (devices.findIndex((d) => d.id === item.id) + 1) : parsedLocation;
       } else {

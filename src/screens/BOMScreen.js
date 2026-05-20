@@ -33,7 +33,9 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
   const [litDeviceIds, setLitDeviceIds] = useState([]);
   const [showPositionPicker, setShowPositionPicker] = useState(false);
   const [pendingComponent, setPendingComponent] = useState(null);
+  const [expandedBank, setExpandedBank] = useState(null);
   const currentLitPosition = useRef(null);
+  const isOperatingRef = useRef(false);
 
   const sendLightCommand = async (type, position) => {
     if (!global.deviceConnection || !global.deviceConnection.handler) return;
@@ -92,6 +94,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       position: -1,
       description: -1,
       category: -1,
+      quantity: -1,
     };
 
     const sortOrderKeywords = ['序号', 'no', 'index', '#'];
@@ -99,9 +102,10 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     const valueKeywords = ['值', 'value', '数值', '规格', '参数', '参数值'];
     const supplierIdKeywords = ['supplier', '供应商', '编号', '料号', 'partno', 'pn', '供应商编号', 'vendor'];
     const packageKeywords = ['封装', 'package', '封装形式', 'footprint'];
-    const positionKeywords = ['位号', 'position', 'pos', '位'];
+    const positionKeywords = ['位号'];
     const descriptionKeywords = ['备注', '描述', 'description', 'desc', '说明'];
     const categoryKeywords = ['类别', '分类', 'category', 'type', '种类'];
+    const quantityKeywords = ['数量', 'qty', 'amount', 'count', 'num', 'pcs'];
 
     for (let i = 0; i < headerRow.length; i++) {
       const header = String(headerRow[i]).toLowerCase().trim();
@@ -116,12 +120,14 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         mapping.supplierId = i;
       } else if (mapping.package === -1 && packageKeywords.some(k => header.includes(k.toLowerCase()))) {
         mapping.package = i;
-      } else if (mapping.position === -1 && positionKeywords.some(k => header.includes(k.toLowerCase()))) {
+      } else if (mapping.position === -1 && positionKeywords.some(k => header === k.toLowerCase())) {
         mapping.position = i;
       } else if (mapping.description === -1 && descriptionKeywords.some(k => header.includes(k.toLowerCase()))) {
         mapping.description = i;
       } else if (mapping.category === -1 && categoryKeywords.some(k => header.includes(k.toLowerCase()))) {
         mapping.category = i;
+      } else if (mapping.quantity === -1 && quantityKeywords.some(k => header.includes(k.toLowerCase()))) {
+        mapping.quantity = i;
       }
     }
 
@@ -241,16 +247,12 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         const category = row[columnMapping.category] ? String(row[columnMapping.category]).trim() : '';
         const value = row[columnMapping.value] ? String(row[columnMapping.value]).trim() : '';
         const sortOrder = columnMapping.sortOrder !== -1 && row[columnMapping.sortOrder] ? Number(row[columnMapping.sortOrder]) : 0;
+        const quantity = columnMapping.quantity !== -1 && row[columnMapping.quantity] ? String(row[columnMapping.quantity]).trim() : '';
 
         const electricalParams = parseValueToElectricalParams(value);
         const finalCategory = category || electricalParams.type;
 
-        let componentName = '';
-        if (deviceName) {
-          componentName += deviceName;
-          if (packageType) componentName += ' ' + packageType;
-          if (description && !componentName.includes(description)) componentName += ' (' + description + ')';
-        }
+        let componentName = deviceName || '';
 
         if (componentName || supplierId) {
           bomComponents.push({
@@ -259,17 +261,11 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
             package: packageType,
             position: bomPosition,
             description: description,
-            deviceName: deviceName,
             category: finalCategory,
             value: value,
             sortOrder: sortOrder,
-            resistance: electricalParams.resistance,
-            voltage: electricalParams.voltage,
-            capacitance: electricalParams.capacitance,
-            inductance: electricalParams.inductance,
-            current: electricalParams.current,
-            power: electricalParams.power,
-            frequency: electricalParams.frequency,
+            quantity: quantity,
+            matchStatus: 'pending',
           });
         }
       }
@@ -333,14 +329,14 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       console.log(`  器件供应商编号: ${device.supplierId}`);
       console.log(`  器件封装: ${device.package}`);
 
-      if (
-        component.supplierId &&
-        device.supplierId &&
-        component.deviceName &&
-        device.name
-      ) {
-        const supplierMatch = device.supplierId === component.supplierId;
-        const nameMatch = device.name === component.deviceName;
+      const compName = component.name || component.deviceName || '';
+      const compSupplierId = component.supplierId || '';
+      const devName = device.name || '';
+      const devSupplierId = device.supplierId || '';
+
+      if (compSupplierId && devSupplierId && compName && devName) {
+        const supplierMatch = devSupplierId === compSupplierId;
+        const nameMatch = devName === compName;
         console.log(
           `  供应商编号匹配: ${supplierMatch}, 器件名称匹配: ${nameMatch}`
         );
@@ -354,8 +350,8 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         }
       }
 
-      if (component.supplierId && device.supplierId && !component.deviceName) {
-        if (device.supplierId === component.supplierId) {
+      if (compSupplierId && devSupplierId && !compName) {
+        if (devSupplierId === compSupplierId) {
           const packageMatch = checkPackageMatch(
             device.package,
             component.package
@@ -365,13 +361,24 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         }
       }
 
-      if (component.deviceName && device.name && !component.supplierId) {
-        if (device.name === component.deviceName) {
+      if (compName && devName && !compSupplierId) {
+        if (devName === compName) {
           const packageMatch = checkPackageMatch(
             device.package,
             component.package
           );
           console.log(`  仅器件名称匹配: true, 封装匹配: ${packageMatch}`);
+          if (packageMatch) return true;
+        }
+      }
+
+      if (!compSupplierId && !devSupplierId && compName && devName) {
+        if (devName === compName) {
+          const packageMatch = checkPackageMatch(
+            device.package,
+            component.package
+          );
+          console.log(`  编号都为空，名称匹配: true, 封装匹配: ${packageMatch}`);
           if (packageMatch) return true;
         }
       }
@@ -399,67 +406,74 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     return matchInfo.exists;
   };
 
-  const handleComponentPress = async (component, device = null) => {
+  const handleComponentPress = async (component) => {
     if (!global.deviceConnection) {
       Alert.alert('提示', '请先在连接页面连接蓝牙设备');
       return;
     }
 
-    let targetDevice = device;
-    if (!targetDevice) {
-      const matchInfo = getDeviceMatchInfo(component);
-      if (!matchInfo.exists) {
-        return;
-      }
-      if (matchInfo.devices && matchInfo.devices.length > 0) {
-        targetDevice = matchInfo.devices[0];
-      }
+    if (isOperatingRef.current) return;
+    isOperatingRef.current = true;
+
+    const matchInfo = getDeviceMatchInfo(component);
+    if (!matchInfo.exists || !matchInfo.devices || matchInfo.devices.length === 0) {
+      isOperatingRef.current = false;
+      return;
     }
 
-    if (!targetDevice) return;
-
-    let hardwarePosition;
-    if (targetDevice.location) {
-      const parsedLocation = parseInt(targetDevice.location, 10);
-      const index = devices.findIndex((d) => d.id === targetDevice.id);
-      hardwarePosition = isNaN(parsedLocation) ? (index + 1) : parsedLocation;
-    } else {
-      const index = devices.findIndex((d) => d.id === targetDevice.id);
-      hardwarePosition = index + 1;
-    }
+    const allLit = matchInfo.devices.every(d => litDeviceIds.includes(d.id));
 
     try {
       const { handler } = global.deviceConnection;
-      const isLit = litDeviceIds.includes(targetDevice.id);
 
-      if (isLit) {
-        const response = await handler.sendCommand({
-          type: 'lightOff',
-          lightId: hardwarePosition,
-        });
-
-        if (response.success) {
-          setLitDeviceIds(litDeviceIds.filter((id) => id !== targetDevice.id));
+      if (allLit) {
+        for (const targetDevice of matchInfo.devices) {
+          let hardwarePosition;
+          if (targetDevice.location != null && targetDevice.location !== '') {
+            const parsedLocation = parseInt(targetDevice.location, 10);
+            hardwarePosition = isNaN(parsedLocation) ? (devices.findIndex((d) => d.id === targetDevice.id) + 1) : parsedLocation;
+          } else {
+            hardwarePosition = devices.findIndex((d) => d.id === targetDevice.id) + 1;
+          }
+          const response = await handler.sendCommand({
+            type: 'lightOff',
+            lightId: hardwarePosition,
+          });
+          if (response.success) {
+            setLitDeviceIds(prev => prev.filter(id => id !== targetDevice.id));
+          }
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       } else {
-        const response = await handler.sendCommand({
-          type: 'lightOn',
-          lightId: hardwarePosition,
-        });
-
-        if (response.success) {
-          setLitDeviceIds([...litDeviceIds, targetDevice.id]);
+        for (const targetDevice of matchInfo.devices) {
+          let hardwarePosition;
+          if (targetDevice.location != null && targetDevice.location !== '') {
+            const parsedLocation = parseInt(targetDevice.location, 10);
+            hardwarePosition = isNaN(parsedLocation) ? (devices.findIndex((d) => d.id === targetDevice.id) + 1) : parsedLocation;
+          } else {
+            hardwarePosition = devices.findIndex((d) => d.id === targetDevice.id) + 1;
+          }
+          const response = await handler.sendCommand({
+            type: 'lightOn',
+            lightId: hardwarePosition,
+          });
+          if (response.success) {
+            setLitDeviceIds(prev => [...prev, targetDevice.id]);
+          }
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
     } catch (error) {
       logError('器件操作失败', error, 'BOMScreen.handleComponentPress');
+    } finally {
+      isOperatingRef.current = false;
     }
   };
 
   const getOccupiedPositions = () => {
     const occupied = new Map();
     devices
-      .filter((d) => d.shelfId === '1' && d.location)
+      .filter((d) => d.shelfId === '1' && d.location != null && d.location !== '')
       .forEach((d) => {
         const pos = parseInt(d.location, 10);
         if (!isNaN(pos)) {
@@ -472,7 +486,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
   const getAllPositions = () => {
     const occupied = getOccupiedPositions();
     const positions = [];
-    for (let i = 1; i <= 100; i++) {
+    for (let i = 0; i < 90; i++) {
       positions.push({
         position: i,
         isOccupied: occupied.has(i),
@@ -484,7 +498,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
 
   const handleShelfDevice = (component) => {
     if (!global.deviceConnection) {
-      Alert.alert('提示', '上架器件需要连接蓝牙设备以亮灯提示位置，请先在连接页面连接蓝牙设备');
+      Alert.alert('提示', '请先在连接页面连接蓝牙设备');
       return;
     }
     setPendingComponent(component);
@@ -539,14 +553,14 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     console.log('=== autoLightAllSufficientDevices 开始 ===');
 
     if (!global.deviceConnection) {
-      console.log('❌ 未连接蓝牙设备，跳过自动点亮');
+      console.log('未连接蓝牙设备，跳过自动点亮');
       Alert.alert('提示', '请先在连接页面连接蓝牙设备');
       return;
     }
 
-    console.log('✅ 蓝牙设备已连接');
-    console.log(`📦 导入的组件数量: ${importedComponents.length}`);
-    console.log(`📦 器件架中的器件数量: ${devices.length}`);
+    console.log('蓝牙设备已连接');
+    console.log(`导入的组件数量: ${importedComponents.length}`);
+    console.log(`器件架中的器件数量: ${devices.length}`);
 
     console.log('=== 器件架中的所有器件 ===');
     devices.forEach((d, index) => {
@@ -570,10 +584,10 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       }
     }
 
-    console.log(`⭐ 待点亮的器件数量: ${devicesToLight.length}`);
+    console.log(`待点亮的器件数量: ${devicesToLight.length}`);
 
     if (devicesToLight.length === 0) {
-      console.log('❌ 没有在架的器件');
+      console.log('没有在架的器件');
       Alert.alert('提示', '没有在架的器件可以点亮');
       return;
     }
@@ -587,35 +601,33 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       console.log(`器件ID: ${device.id}, 位号: ${device.position}`);
 
       let hardwarePosition;
-      if (device.location) {
+      if (device.location != null && device.location !== '') {
         const parsedLocation = parseInt(device.location, 10);
-        const index = devices.findIndex((d) => d.id === device.id);
-        hardwarePosition = isNaN(parsedLocation) ? (index + 1) : parsedLocation;
+        hardwarePosition = isNaN(parsedLocation) ? (devices.findIndex((d) => d.id === device.id) + 1) : parsedLocation;
       } else {
-        const index = devices.findIndex((d) => d.id === device.id);
-        hardwarePosition = index + 1;
+        hardwarePosition = devices.findIndex((d) => d.id === device.id) + 1;
       }
       console.log(`器件位置: ${device.location}, 计算的硬件位置: ${hardwarePosition}`);
 
       try {
         const { handler } = global.deviceConnection;
-        console.log('📤 发送点亮指令...');
+        console.log('发送点亮指令...');
         const response = await handler.sendCommand({
           type: 'lightOn',
           lightId: hardwarePosition,
         });
 
         if (response && response.success) {
-          console.log(`✅ 指令发送成功`);
+          console.log(`指令发送成功`);
           successCount++;
         } else {
-          console.log(`❌ 指令发送失败: ${response?.message || '未知错误'}`);
+          console.log(`指令发送失败: ${response?.message || '未知错误'}`);
           failCount++;
         }
 
         await new Promise((resolve) => setTimeout(resolve, 500));
       } catch (error) {
-        console.error(`❌ 发送指令异常:`, error);
+        console.error(`发送指令异常:`, error);
         failCount++;
       }
     }
@@ -646,53 +658,79 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
             filteredComponents.map((component, compIndex) => {
               const matchInfo = getDeviceMatchInfo(component);
               if (matchInfo.devices && matchInfo.devices.length > 0) {
-                return matchInfo.devices.map((device, deviceIndex) => {
-                  const isLit = litDeviceIds.includes(device.id);
-                  let bgColor, textColor, statusText;
-                  if (isLit) {
-                    bgColor = '#e8f5e9';
-                    textColor = '#2e7d32';
-                    statusText = `💡 位置 ${device.location || 'N/A'}`;
-                  } else {
-                    bgColor = '#ffffff';
-                    textColor = '#333';
-                    statusText = `位置 ${device.location || 'N/A'}`;
-                  }
+                const allLit = matchInfo.devices.every(d => litDeviceIds.includes(d.id));
+                const anyLit = matchInfo.devices.some(d => litDeviceIds.includes(d.id));
+                let bgColor, textColor;
+                if (allLit) {
+                  bgColor = '#e8f5e9';
+                  textColor = '#2e7d32';
+                } else if (anyLit) {
+                  bgColor = '#fff8e1';
+                  textColor = '#f57f17';
+                } else {
+                  bgColor = '#ffffff';
+                  textColor = '#333';
+                }
+                const positionsText = matchInfo.devices
+                  .map(d => {
+                    if (d.location != null && d.location !== '') {
+                      const parsedLocation = parseInt(d.location, 10);
+                      if (!isNaN(parsedLocation)) return String(parsedLocation);
+                    }
+                    const idx = devices.findIndex((dev) => dev.id === d.id);
+                    return idx >= 0 ? String(idx) : 'N/A';
+                  })
+                  .join(', ');
 
-                  return (
-                    <TouchableOpacity
-                      key={`${compIndex}-${deviceIndex}-${device.id}`}
-                      style={[
-                        styles.componentItem,
-                        { backgroundColor: bgColor },
-                      ]}
-                      onPress={() => handleComponentPress(component, device)}
-                      activeOpacity={1}
-                    >
-                      <View style={styles.seqCircle}>
-                        <Text style={styles.seqText}>{compIndex + 1}</Text>
+                return (
+                  <TouchableOpacity
+                    key={compIndex}
+                    style={[
+                      styles.componentItem,
+                      { backgroundColor: bgColor },
+                    ]}
+                    onPress={() => handleComponentPress(component)}
+                    activeOpacity={1}
+                  >
+                    <View style={styles.seqCircle}>
+                      <Text style={styles.seqText}>{compIndex + 1}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.rowContainer}>
+                        <View style={styles.rowItem}>
+                          <Text style={styles.labelText}>编号: </Text>
+                          <Text style={styles.valueText}>{component.supplierId || 'null'}</Text>
+                        </View>
+                        <View style={styles.rowItem}>
+                          <Text style={styles.labelText}>名称: </Text>
+                          <Text style={styles.valueText}>{component.name || 'null'}</Text>
+                        </View>
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={[styles.componentText, { color: textColor }]}
-                        >
-                          {component.name}
+                      {component.package && (
+                        <Text style={styles.deviceInfo}>
+                          <Text style={styles.labelText}>封装:</Text>
+                          <Text style={styles.valueText}>{component.package}</Text>
                         </Text>
-                        {component.supplierId && (
-                          <Text style={styles.supplierId}>
-                            编号: {component.supplierId}
+                      )}
+                      <Text style={styles.deviceInfo}>
+                        <Text style={styles.labelText}>位号:</Text>
+                        <Text style={styles.valueText}>{component.position || '未设置'}</Text>
+                      </Text>
+                      <View style={styles.bottomRow}>
+                        <Text style={[styles.statusText, { color: textColor }]}>
+                          <Text style={styles.labelText}>位置:</Text>
+                          <Text style={styles.valueText}>{positionsText}</Text>
+                        </Text>
+                        {component.quantity && (
+                          <Text style={styles.quantityText}>
+                            <Text style={styles.labelText}>数量:</Text>
+                            <Text style={styles.valueText}>{component.quantity}</Text>
                           </Text>
                         )}
-                        <Text style={styles.deviceInfo}>
-                          位号: {device.position || `未设置`}
-                        </Text>
-                        <Text style={[styles.statusText, { color: textColor }]}>
-                          {statusText}
-                        </Text>
                       </View>
-                    </TouchableOpacity>
-                  );
-                });
+                    </View>
+                  </TouchableOpacity>
+                );
               } else {
                 return (
                   <View
@@ -706,20 +744,38 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                       <Text style={styles.seqText}>{compIndex + 1}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.componentText, { color: '#ef6c00' }]}
-                      >
-                        {component.name}
-                      </Text>
-                      {component.supplierId && (
-                        <Text style={styles.supplierId}>
-                          编号: {component.supplierId}
+                        <View style={styles.rowContainer}>
+                          <View style={styles.rowItem}>
+                            <Text style={styles.labelText}>编号: </Text>
+                            <Text style={styles.valueText}>{component.supplierId || 'null'}</Text>
+                          </View>
+                          <View style={styles.rowItem}>
+                            <Text style={styles.labelText}>名称: </Text>
+                            <Text style={styles.valueText}>{component.name || 'null'}</Text>
+                          </View>
+                        </View>
+                        {component.package && (
+                          <Text style={styles.deviceInfo}>
+                            <Text style={styles.labelText}>封装:</Text>
+                            <Text style={styles.valueText}>{component.package}</Text>
+                          </Text>
+                        )}
+                        <Text style={styles.deviceInfo}>
+                          <Text style={styles.labelText}>位号:</Text>
+                          <Text style={styles.valueText}>未设置</Text>
                         </Text>
-                      )}
-                      <Text style={[styles.statusText, { color: '#ef6c00' }]}>
-                        ✗ 不在器件架中
-                      </Text>
-                    </View>
+                        <View style={styles.bottomRow}>
+                          <Text style={[styles.statusText, { color: '#ef6c00' }]}>
+                            ✗ 不在器件架中
+                          </Text>
+                          {component.quantity && (
+                            <Text style={styles.quantityText}>
+                              <Text style={styles.labelText}>数量:</Text>
+                              <Text style={styles.valueText}>{component.quantity}</Text>
+                            </Text>
+                          )}
+                        </View>
+                      </View>
                     <TouchableOpacity
                       style={styles.shelfButton}
                       onPress={() => handleShelfDevice(component)}
@@ -769,36 +825,55 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
               </Text>
             )}
             <ScrollView style={styles.positionGrid}>
-              <View style={styles.positionGridInner}>
-                {getAllPositions().map((posInfo) => (
+              {Array.from({ length: 3 }, (_, bankIndex) => (
+                <View key={bankIndex}>
                   <TouchableOpacity
-                    key={posInfo.position}
-                    style={[
-                      styles.positionItem,
-                      posInfo.isOccupied ? styles.positionItemOccupied : styles.positionItemEmpty,
-                    ]}
-                    onPress={() => {
-                      if (posInfo.isOccupied) return;
-                      handleSelectPosition(posInfo.position);
-                    }}
-                    activeOpacity={posInfo.isOccupied ? 1 : 0.7}
+                    style={styles.positionBankHeader}
+                    onPress={() => setExpandedBank(expandedBank === bankIndex ? null : bankIndex)}
                   >
-                    <Text
-                      style={[
-                        styles.positionItemText,
-                        posInfo.isOccupied ? styles.positionItemTextOccupied : styles.positionItemTextEmpty,
-                      ]}
-                    >
-                      {posInfo.position}
+                    <Text style={styles.positionBankHeaderText}>
+                      第{bankIndex + 1}排（位置 {bankIndex * 30}-{bankIndex * 30 + 29}）
                     </Text>
-                    {posInfo.isOccupied && (
-                      <Text style={styles.positionItemDeviceName} numberOfLines={1}>
-                        {posInfo.deviceName}
-                      </Text>
-                    )}
+                    <Text style={styles.positionBankHeaderArrow}>
+                      {expandedBank === bankIndex ? '▲' : '▼'}
+                    </Text>
                   </TouchableOpacity>
-                ))}
-              </View>
+                  {expandedBank === bankIndex && (
+                    <View style={styles.positionGridInner}>
+                      {getAllPositions()
+                        .slice(bankIndex * 30, (bankIndex + 1) * 30)
+                        .map((posInfo) => (
+                          <TouchableOpacity
+                            key={posInfo.position}
+                            style={[
+                              styles.positionItem,
+                              posInfo.isOccupied ? styles.positionItemOccupied : styles.positionItemEmpty,
+                            ]}
+                            onPress={() => {
+                              if (posInfo.isOccupied) return;
+                              handleSelectPosition(posInfo.position);
+                            }}
+                            activeOpacity={posInfo.isOccupied ? 1 : 0.7}
+                          >
+                            <Text
+                              style={[
+                                styles.positionItemText,
+                                posInfo.isOccupied ? styles.positionItemTextOccupied : styles.positionItemTextEmpty,
+                              ]}
+                            >
+                              {posInfo.position}
+                            </Text>
+                            {posInfo.isOccupied && (
+                              <Text style={styles.positionItemDeviceName} numberOfLines={1}>
+                                {posInfo.deviceName}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+                  )}
+                </View>
+              ))}
             </ScrollView>
             <TouchableOpacity
               style={styles.modalCancelButton}
@@ -874,20 +949,45 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
-  supplierId: {
+  rowContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  rowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  labelText: {
     fontSize: 12,
-    color: '#666',
-    marginTop: 2,
+    color: '#888',
+    marginRight: 4,
+  },
+  valueText: {
+    fontSize: 13,
+    color: '#333',
+    fontWeight: '500',
   },
   deviceInfo: {
     fontSize: 12,
     color: '#666',
-    marginTop: 2,
+    marginTop: 4,
   },
   statusText: {
     fontSize: 12,
     fontWeight: '500',
     marginTop: 2,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  quantityText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#1976d2',
   },
   emptyText: {
     fontSize: 14,
@@ -961,18 +1061,39 @@ const styles = StyleSheet.create({
   positionGrid: {
     maxHeight: 350,
   },
+  positionBankHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  positionBankHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  positionBankHeaderArrow: {
+    fontSize: 12,
+    color: '#666',
+  },
   positionGridInner: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
   },
   positionItem: {
-    width: 56,
-    height: 52,
+    width: '18%',
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 8,
-    margin: 4,
+    borderRadius: 6,
+    marginHorizontal: '1%',
+    marginBottom: 6,
     borderWidth: 1,
   },
   positionItemEmpty: {

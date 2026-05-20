@@ -175,7 +175,7 @@ class StorageService {
     try {
       const devices = await this.getDevices();
 
-      if (device.location && device.shelfId === '1') {
+      if (device.location != null && device.location !== '' && device.shelfId === '1') {
         const conflict = devices.find(
           (d) => d.location === device.location && d.shelfId === '1'
         );
@@ -220,7 +220,7 @@ class StorageService {
     try {
       const devices = await this.getDevices();
 
-      if (updatedDevice.location && updatedDevice.shelfId === '1') {
+      if (updatedDevice.location != null && updatedDevice.location !== '' && updatedDevice.shelfId === '1') {
         const conflict = devices.find(
           (d) =>
             d.location === updatedDevice.location &&
@@ -904,7 +904,7 @@ class StorageService {
             columnMapping
           )) {
             if (
-              header.includes(chineseName) ||
+              header === chineseName ||
               header.toLowerCase() === chineseName.toLowerCase()
             ) {
               mappedField = englishName;
@@ -964,13 +964,29 @@ class StorageService {
       const locationMap = {};
       const existingDevices = await this.getDevices();
       for (const ed of existingDevices) {
-        if (ed.location && ed.shelfId === '1') {
+        if (ed.location != null && ed.location !== '' && ed.shelfId === '1') {
           locationMap[ed.location] = ed.name;
         }
       }
+
+      // 为没有location的器件自动分配空位置
       for (const device of newDevices) {
-        if (device.location) {
-          if (locationMap[device.location]) {
+        if (device.location == null || device.location === '') {
+          for (let pos = 0; pos < 90; pos++) {
+            const posStr = String(pos);
+            if (!locationMap[posStr]) {
+              device.location = posStr;
+              locationMap[posStr] = device.name;
+              break;
+            }
+          }
+        }
+      }
+
+      // 检查有location的器件是否冲突
+      for (const device of newDevices) {
+        if (device.location != null && device.location !== '') {
+          if (locationMap[device.location] && locationMap[device.location] !== device.name) {
             errors.push(
               `第 ${newDevices.indexOf(device) + 2} 行: 位置 "${device.location}" 与已有器件 "${locationMap[device.location]}" 冲突`
             );
@@ -983,7 +999,7 @@ class StorageService {
       // 批量添加新器件（跳过有位置冲突的器件）
       for (const device of newDevices) {
         const hasConflict =
-          device.location &&
+          device.location != null && device.location !== '' &&
           errors.some((e) =>
             e.includes(`位置 "${device.location}" 与已有器件`)
           );
@@ -994,7 +1010,7 @@ class StorageService {
 
       const importedCount = newDevices.filter((device) => {
         const hasConflict =
-          device.location &&
+          device.location != null && device.location !== '' &&
           errors.some((e) =>
             e.includes(`位置 "${device.location}" 与已有器件`)
           );

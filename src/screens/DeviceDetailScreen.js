@@ -10,7 +10,7 @@ const DeviceDetailScreen = ({ navigation, route }) => {
   const getHardwarePosition = useMemo(async () => {
     try {
       // 优先使用设备的location字段，如果没有则使用数组索引
-      if (device.location) {
+      if (device.location != null && device.location !== '') {
         const parsedLocation = parseInt(device.location, 10);
         if (!isNaN(parsedLocation)) {
           setHardwarePosition(parsedLocation);
