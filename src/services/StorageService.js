@@ -866,7 +866,7 @@ class StorageService {
         供应商编号: 'supplierId',
         封装: 'package',
         位号: 'position',
-        备注: 'remark',
+        备注: 'notes',
         值: 'value',
         数量: 'quantity',
         型号: 'name',
@@ -931,23 +931,26 @@ class StorageService {
           device.supplierId = device.id;
         }
 
-        // 自动根据"值"字段填入对应的电气参数字段
+        // 自动根据"值"字段填入对应的电气参数字段（支持复合值如 "10uf/50V"）
         if (device.value) {
-          const v = device.value.trim();
-          if (/^\d+\.?\d*\s*[kKMmμuGg]?\s*[ΩΩRr]$/i.test(v) || /^\d+\.?\d*\s*[kKMmμuGg]?\s*ohm$/i.test(v)) {
-            device.resistance = v;
-          } else if (/^\d+\.?\d*\s*[kKMmGgT]?\s*[Hh]z$/i.test(v)) {
-            device.frequency = v;
-          } else if (/^\d+\.?\d*\s*[pPnNμuUmM]?\s*[Ff]$/i.test(v)) {
-            device.capacitance = v;
-          } else if (/^\d+\.?\d*\s*[nNμuUmM]?\s*[Hh]$/i.test(v)) {
-            device.inductance = v;
-          } else if (/^\d+\.?\d*\s*[mMkK]?\s*[Vv]$/i.test(v)) {
-            device.voltage = v;
-          } else if (/^\d+\.?\d*\s*[nNμuUmMkK]?\s*[Aa]$/i.test(v)) {
-            device.current = v;
-          } else if (/^\d+\.?\d*\s*[mMkK]?\s*[Ww]$/i.test(v)) {
-            device.power = v;
+          const parts = device.value.trim().split(/[/,，\s]+/).filter(p => p.trim());
+          for (const part of parts) {
+            const v = part.trim();
+            if (/^\d+\.?\d*\s*[kKMmμuGg]?\s*[ΩΩRr]$/i.test(v) || /^\d+\.?\d*\s*[kKMmμuGg]?\s*ohm$/i.test(v)) {
+              device.resistance = v;
+            } else if (/^\d+\.?\d*\s*[kKMmGgT]?\s*[Hh]z$/i.test(v)) {
+              device.frequency = v;
+            } else if (/^\d+\.?\d*\s*[pPnNμuUmM]?\s*[Ff]$/i.test(v)) {
+              device.capacitance = v;
+            } else if (/^\d+\.?\d*\s*[nNμuUmM]?\s*[Hh]$/i.test(v)) {
+              device.inductance = v;
+            } else if (/^\d+\.?\d*\s*[mMkK]?\s*[Vv]$/i.test(v)) {
+              device.voltage = v;
+            } else if (/^\d+\.?\d*\s*[nNμuUmMkK]?\s*[Aa]$/i.test(v)) {
+              device.current = v;
+            } else if (/^\d+\.?\d*\s*[mMkK]?\s*[Ww]$/i.test(v)) {
+              device.power = v;
+            }
           }
         }
 

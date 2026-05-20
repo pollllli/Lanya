@@ -518,7 +518,8 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
 
       if (response.success) {
         showSuccessMessage('已点亮所有灯');
-        const allDeviceIds = devices.map(d => d.id);
+        const currentDevices = await StorageService.getDevices();
+        const allDeviceIds = currentDevices.map(d => d.id);
         dispatch({ type: 'SET_LIT_DEVICE_IDS', payload: allDeviceIds });
       } else {
         Alert.alert('错误', `操作失败: ${response.message}`);
@@ -808,7 +809,7 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
             </Text>
           </View>
           <Text style={styles.deviceTagId}>
-            {item.supplierId || item.id || 'N/A'}
+            {item.supplierId || ''}
           </Text>
           <Text style={styles.deviceTagLocation}>
             位置 {hardwarePosition}

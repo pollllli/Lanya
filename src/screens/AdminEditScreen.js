@@ -322,27 +322,29 @@ const AdminEditScreen = ({ navigation, route }) => {
     >
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={true}>
         <View style={styles.formContainer}>
-          <View style={styles.importButtonContainer}>
-            <TouchableOpacity
-              style={[
-                styles.importButton,
-                isImporting && styles.importButtonDisabled,
-              ]}
-              onPress={handleImport}
-              disabled={isImporting}
-            >
-              <Text style={styles.importButtonText}>
-                {isImporting ? '导入中...' : '从Excel导入'}
-              </Text>
-            </TouchableOpacity>
+          {isNew && (
+            <View style={styles.importButtonContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.importButton,
+                  isImporting && styles.importButtonDisabled,
+                ]}
+                onPress={handleImport}
+                disabled={isImporting}
+              >
+                <Text style={styles.importButtonText}>
+                  {isImporting ? '导入中...' : '从Excel导入'}
+                </Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.importButton, styles.scanButton]}
-              onPress={() => navigation.navigate('ScanScreen')}
-            >
-              <Text style={styles.importButtonText}>扫码导入</Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                style={[styles.importButton, styles.scanButton]}
+                onPress={() => navigation.navigate('ScanScreen')}
+              >
+                <Text style={styles.importButtonText}>扫码导入</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>基本信息</Text>

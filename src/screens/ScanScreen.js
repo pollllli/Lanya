@@ -151,21 +151,47 @@ const ScanScreen = ({ navigation, route }) => {
         return;
       }
 
+      // 从二维码中提取值字段
+      const valueStr = parsed.val || parsed.value || parsed.v || '';
+      // 解析电气参数（支持复合值如 "10uf/50V"）
+      const electricalParams = { resistance: '', voltage: '', capacitance: '', inductance: '', current: '', power: '', frequency: '' };
+      if (valueStr) {
+        const parts = valueStr.trim().split(/[/,，\s]+/).filter(p => p.trim());
+        for (const part of parts) {
+          const v = part.trim();
+          if (/^\d+\.?\d*\s*[kKMmμuGg]?\s*[ΩΩRr]$/i.test(v) || /^\d+\.?\d*\s*[kKMmμuGg]?\s*ohm$/i.test(v)) {
+            electricalParams.resistance = v;
+          } else if (/^\d+\.?\d*\s*[kKMmGgT]?\s*[Hh]z$/i.test(v)) {
+            electricalParams.frequency = v;
+          } else if (/^\d+\.?\d*\s*[pPnNμuUmM]?\s*[Ff]$/i.test(v)) {
+            electricalParams.capacitance = v;
+          } else if (/^\d+\.?\d*\s*[nNμuUmM]?\s*[Hh]$/i.test(v)) {
+            electricalParams.inductance = v;
+          } else if (/^\d+\.?\d*\s*[mMkK]?\s*[Vv]$/i.test(v)) {
+            electricalParams.voltage = v;
+          } else if (/^\d+\.?\d*\s*[nNμuUmMkK]?\s*[Aa]$/i.test(v)) {
+            electricalParams.current = v;
+          } else if (/^\d+\.?\d*\s*[mMkK]?\s*[Ww]$/i.test(v)) {
+            electricalParams.power = v;
+          }
+        }
+      }
+
       const newDevice = {
         name: deviceName || '',
         supplierId: supplierId,
-        package: '',
+        package: parsed.pkg || parsed.package || '',
         position: '',
         category: '',
-        function: '',
-        value: '',
-        resistance: '',
-        voltage: '',
-        capacitance: '',
-        inductance: '',
-        current: '',
-        power: '',
-        frequency: '',
+        notes: '',
+        value: valueStr,
+        resistance: electricalParams.resistance,
+        voltage: electricalParams.voltage,
+        capacitance: electricalParams.capacitance,
+        inductance: electricalParams.inductance,
+        current: electricalParams.current,
+        power: electricalParams.power,
+        frequency: electricalParams.frequency,
         shelfId: '1',
         location: String(emptyPosition),
       };

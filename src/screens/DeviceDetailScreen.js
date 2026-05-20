@@ -128,6 +128,12 @@ const DeviceDetailScreen = ({ navigation, route }) => {
               <Text style={styles.specValue}>{device.current}</Text>
             </View>
           )}
+          {device.notes && (
+            <View style={styles.specItem}>
+              <Text style={styles.specLabel}>备注:</Text>
+              <Text style={styles.specValue}>{device.notes}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.buttonContainer}>

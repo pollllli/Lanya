@@ -1,7 +1,8 @@
 /**
  * BOM配单屏幕
  * 用于创建、编辑和管理BOM（Bill of Materials）配单
- * 支持从器件库选择组件，保存和加载BOM配单
+ * 支持从Excel文件导入BOM数据，与器件架中的器件进行匹配
+ * 支持蓝牙亮灯定位器件位置，以及将未上架的器件上架到指定位置
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -25,18 +26,27 @@ import { logError, formatErrorMessage } from '../utils/ErrorHandler';
 const BOMScreen = ({ navigation, isAdmin = false }) => {
   console.log('BOMScreen received isAdmin:', isAdmin);
   const isAdminUser = Boolean(isAdmin);
-  const [components, setComponents] = useState([]);
-  const [devices, setDevices] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filteredComponents, setFilteredComponents] = useState([]);
-  const [isImporting, setIsImporting] = useState(false);
-  const [litDeviceIds, setLitDeviceIds] = useState([]);
-  const [showPositionPicker, setShowPositionPicker] = useState(false);
-  const [pendingComponent, setPendingComponent] = useState(null);
-  const [expandedBank, setExpandedBank] = useState(null);
-  const currentLitPosition = useRef(null);
-  const isOperatingRef = useRef(false);
 
+  // ==================== 状态定义 ====================
+  const [components, setComponents] = useState([]);           // 导入的BOM组件列表
+  const [devices, setDevices] = useState([]);                  // 器件架中的所有器件
+  const [searchQuery, setSearchQuery] = useState('');          // 搜索关键词
+  const [filteredComponents, setFilteredComponents] = useState([]); // 搜索过滤后的组件列表
+  const [isImporting, setIsImporting] = useState(false);       // 是否正在导入文件
+  const [litDeviceIds, setLitDeviceIds] = useState([]);        // 当前已亮灯的器件ID列表
+  const [showPositionPicker, setShowPositionPicker] = useState(false); // 是否显示位置选择弹窗
+  const [pendingComponent, setPendingComponent] = useState(null);     // 等待上架的组件（暂存）
+  const [expandedBank, setExpandedBank] = useState(null);      // 当前展开的排号（位置选择器中）
+  const currentLitPosition = useRef(null);                     // 当前亮灯的物理位置（用于位置选择器预览）
+  const isOperatingRef = useRef(false);                        // 操作锁，防止重复点击
+
+  // ==================== 蓝牙灯光控制 ====================
+
+  /**
+   * 发送灯光指令到蓝牙设备
+   * @param {string} type - 指令类型：'lightOn'（点亮）或 'lightOff'（熄灭）
+   * @param {number} position - 灯光位置编号
+   */
   const sendLightCommand = async (type, position) => {
     if (!global.deviceConnection || !global.deviceConnection.handler) return;
     try {
@@ -46,6 +56,10 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     }
   };
 
+  /**
+   * 熄灭当前亮灯的位置
+   * 用于位置选择器关闭或页面离开时清理灯光状态
+   */
   const turnOffCurrentLight = async () => {
     if (currentLitPosition.current !== null) {
       await sendLightCommand('lightOff', currentLitPosition.current);
@@ -53,6 +67,11 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     }
   };
 
+  // ==================== 页面生命周期 ====================
+
+  /**
+   * 页面获得焦点时加载器件数据，离开时熄灭灯光
+   */
   useFocusEffect(
     React.useCallback(() => {
       loadDevices();
@@ -62,6 +81,10 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     }, [])
   );
 
+  /**
+   * 搜索关键词变化时，实时过滤组件列表
+   * 按组件名称进行模糊匹配
+   */
   useEffect(() => {
     if (!searchQuery || searchQuery.trim() === '') {
       setFilteredComponents(components);
@@ -75,6 +98,11 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     }
   }, [components, searchQuery]);
 
+  // ==================== 数据加载 ====================
+
+  /**
+   * 从本地存储加载器件架中的所有器件
+   */
   const loadDevices = async () => {
     try {
       let savedDevices = await StorageService.getDevices();
@@ -84,19 +112,28 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     }
   };
 
+  // ==================== BOM文件导入与解析 ====================
+
+  /**
+   * 构建Excel表头列名到列索引的映射
+   * 根据中英文关键词自动识别各列的含义
+   * @param {Array} headerRow - Excel表头行数据
+   * @returns {Object} 列名到列索引的映射对象，-1表示未找到对应列
+   */
   const buildColumnMapping = (headerRow) => {
     const mapping = {
-      sortOrder: -1,
-      deviceName: -1,
-      value: -1,
-      supplierId: -1,
-      package: -1,
-      position: -1,
-      description: -1,
-      category: -1,
-      quantity: -1,
+      sortOrder: -1,      // 序号列
+      deviceName: -1,     // 器件名称列
+      value: -1,          // 参数值列
+      supplierId: -1,     // 供应商编号列
+      package: -1,        // 封装列
+      position: -1,       // 位号列
+      description: -1,    // 备注描述列
+      category: -1,       // 类别列
+      quantity: -1,       // 数量列
     };
 
+    // 各列对应的中文/英文关键词，用于自动匹配表头
     const sortOrderKeywords = ['序号', 'no', 'index', '#'];
     const deviceNameKeywords = ['name', '器件名称', '名称', '器件', 'component', 'part', '型号'];
     const valueKeywords = ['值', 'value', '数值', '规格', '参数', '参数值'];
@@ -107,6 +144,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     const categoryKeywords = ['类别', '分类', 'category', 'type', '种类'];
     const quantityKeywords = ['数量', 'qty', 'amount', 'count', 'num', 'pcs'];
 
+    // 遍历表头，根据关键词匹配各列的索引位置
     for (let i = 0; i < headerRow.length; i++) {
       const header = String(headerRow[i]).toLowerCase().trim();
       
@@ -120,7 +158,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         mapping.supplierId = i;
       } else if (mapping.package === -1 && packageKeywords.some(k => header.includes(k.toLowerCase()))) {
         mapping.package = i;
-      } else if (mapping.position === -1 && positionKeywords.some(k => header === k.toLowerCase())) {
+      } else if (mapping.position === -1 && positionKeywords.some(k => header.includes(k.toLowerCase()))) {
         mapping.position = i;
       } else if (mapping.description === -1 && descriptionKeywords.some(k => header.includes(k.toLowerCase()))) {
         mapping.description = i;
@@ -134,10 +172,15 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     return mapping;
   };
 
+  /**
+   * 处理导入BOM文件
+   * 打开文件选择器，读取Excel文件并解析为BOM组件数据
+   */
   const handleImportBOM = async () => {
     try {
       setIsImporting(true);
 
+      // 打开文件选择器，仅允许选择xlsx文件
       const result = await DocumentPicker.getDocumentAsync({
         type: [
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -153,9 +196,11 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       const fileUri = result.assets[0].uri;
       const fileName = result.assets[0].name;
 
+      // 导入前先加载最新的器件数据
       await loadDevices();
 
       try {
+        // 将文件复制到缓存目录并读取内容
         const cacheDir = FileSystem.cacheDirectory;
         const localUri = cacheDir + fileName;
 
@@ -164,10 +209,12 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
           to: localUri,
         });
 
+        // 读取文件并以Base64编码解析
         const fileContent = await FileSystem.readAsStringAsync(localUri, {
           encoding: 'base64',
         });
 
+        // 使用XLSX库解析Excel文件
         const binaryString = atob(fileContent);
         const workbook = XLSX.read(binaryString, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
@@ -189,34 +236,90 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     }
   };
 
+  /**
+   * 将参数值字符串解析为电气参数类型
+   * 支持复合值，如 "10uf/50V" 会同时识别为电容和电压
+   * 分隔符支持：/ 、空格、逗号
+   * @param {string} value - 参数值字符串，如 "10kΩ"、"10uf/50V"、"100nF 25V"
+   * @returns {Object} 包含类型和对应参数值的对象
+   */
   const parseValueToElectricalParams = (value) => {
     const empty = { type: '', resistance: '', voltage: '', capacitance: '', inductance: '', current: '', power: '', frequency: '' };
     if (!value) return empty;
-    const v = value.trim();
+
+    // 将复合值按分隔符拆分为多个子值
+    const parts = value.split(/[/,，\s]+/).filter(p => p.trim());
+    if (parts.length === 0) return empty;
+
+    // 如果只有一个子值，直接匹配
+    if (parts.length === 1) {
+      return parseSingleValue(parts[0].trim(), empty);
+    }
+
+    // 多个子值时，逐个匹配并合并结果
+    const result = { ...empty };
+    let primaryType = '';
+    for (const part of parts) {
+      const parsed = parseSingleValue(part.trim(), empty);
+      if (parsed.type && !primaryType) {
+        primaryType = parsed.type;
+      }
+      if (parsed.resistance) result.resistance = parsed.resistance;
+      if (parsed.voltage) result.voltage = parsed.voltage;
+      if (parsed.capacitance) result.capacitance = parsed.capacitance;
+      if (parsed.inductance) result.inductance = parsed.inductance;
+      if (parsed.current) result.current = parsed.current;
+      if (parsed.power) result.power = parsed.power;
+      if (parsed.frequency) result.frequency = parsed.frequency;
+    }
+    result.type = primaryType;
+    return result;
+  };
+
+  /**
+   * 解析单个参数值字符串
+   * @param {string} v - 单个参数值，如 "10kΩ"、"50V"
+   * @param {Object} empty - 空模板对象
+   * @returns {Object} 匹配结果
+   */
+  const parseSingleValue = (v, empty) => {
+    // 电阻：如 10Ω、4.7kΩ、100R
     if (/^\d+\.?\d*\s*[kKMmμuGg]?\s*[ΩΩRr]$/i.test(v) || /^\d+\.?\d*\s*[kKMmμuGg]?\s*ohm$/i.test(v)) {
       return { ...empty, type: '电阻', resistance: v };
     }
+    // 频率：如 16MHz、50Hz
     if (/^\d+\.?\d*\s*[kKMmGgT]?\s*[Hh]z$/i.test(v)) {
       return { ...empty, type: '频率', frequency: v };
     }
+    // 电容：如 10μF、100nF、10uf
     if (/^\d+\.?\d*\s*[pPnNμuUmM]?\s*[Ff]$/i.test(v)) {
       return { ...empty, type: '电容', capacitance: v };
     }
+    // 电感：如 10mH、1μH
     if (/^\d+\.?\d*\s*[nNμuUmM]?\s*[Hh]$/i.test(v)) {
       return { ...empty, type: '电感', inductance: v };
     }
+    // 电压：如 5V、3.3V、50V
     if (/^\d+\.?\d*\s*[mMkK]?\s*[Vv]$/i.test(v)) {
       return { ...empty, type: '电压', voltage: v };
     }
+    // 电流：如 1A、500mA
     if (/^\d+\.?\d*\s*[nNμuUmMkK]?\s*[Aa]$/i.test(v)) {
       return { ...empty, type: '电流', current: v };
     }
+    // 功率：如 1W、500mW
     if (/^\d+\.?\d*\s*[mMkK]?\s*[Ww]$/i.test(v)) {
       return { ...empty, type: '功率', power: v };
     }
-    return empty;
+    return { ...empty };
   };
 
+  /**
+   * 解析BOM数据（CSV格式）
+   * 自动识别表头列，提取器件信息，按序号排序后更新组件列表
+   * @param {string} csvContent - CSV格式的BOM数据
+   * @param {string} type - 数据类型标识
+   */
   const parseBOMData = async (csvContent, type) => {
     try {
       const workbook = XLSX.read(csvContent, { type: 'string' });
@@ -229,16 +332,19 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         return;
       }
 
+      // 根据表头行构建列映射
       const headerRow = jsonData[0];
       const columnMapping = buildColumnMapping(headerRow);
       console.log('列映射结果:', columnMapping);
 
       const bomComponents = [];
 
+      // 逐行解析数据（跳过表头行）
       for (let i = 1; i < jsonData.length; i++) {
         const row = jsonData[i];
         if (!row || row.length === 0) continue;
 
+        // 根据列映射提取各字段数据
         const packageType = row[columnMapping.package] ? String(row[columnMapping.package]).trim() : '';
         const bomPosition = row[columnMapping.position] ? String(row[columnMapping.position]).trim() : '';
         const supplierId = row[columnMapping.supplierId] ? String(row[columnMapping.supplierId]).trim() : '';
@@ -249,11 +355,13 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         const sortOrder = columnMapping.sortOrder !== -1 && row[columnMapping.sortOrder] ? Number(row[columnMapping.sortOrder]) : 0;
         const quantity = columnMapping.quantity !== -1 && row[columnMapping.quantity] ? String(row[columnMapping.quantity]).trim() : '';
 
+        // 尝试从参数值推断电气类型（如电阻、电容等）
         const electricalParams = parseValueToElectricalParams(value);
         const finalCategory = category || electricalParams.type;
 
         let componentName = deviceName || '';
 
+        // 至少有名称或编号才添加
         if (componentName || supplierId) {
           bomComponents.push({
             name: componentName.trim() || '',
@@ -264,13 +372,21 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
             category: finalCategory,
             value: value,
             sortOrder: sortOrder,
-            quantity: quantity,
+            quantity: quantity,         // 数量字段，仅用于BOM列表展示
+            resistance: electricalParams.resistance || '',
+            voltage: electricalParams.voltage || '',
+            capacitance: electricalParams.capacitance || '',
+            inductance: electricalParams.inductance || '',
+            current: electricalParams.current || '',
+            power: electricalParams.power || '',
+            frequency: electricalParams.frequency || '',
             matchStatus: 'pending',
           });
         }
       }
 
       if (bomComponents.length > 0) {
+        // 按序号排序，序号相同时按供应商编号排序
         const sortedComponents = bomComponents.sort((a, b) => {
           if (a.sortOrder && b.sortOrder) {
             return a.sortOrder - b.sortOrder;
@@ -290,6 +406,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         });
         setComponents(sortedComponents);
 
+        // 统计匹配到的器件数量
         let matchedDeviceCount = 0;
         for (const component of sortedComponents) {
           const matchInfo = getDeviceMatchInfo(component);
@@ -307,6 +424,18 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     }
   };
 
+  // ==================== 器件匹配逻辑 ====================
+
+  /**
+   * 获取BOM组件与器件架中器件的匹配信息
+   * 匹配规则（按优先级）：
+   * 1. 供应商编号 + 器件名称 + 封装 都匹配
+   * 2. 仅供应商编号 + 封装匹配（无器件名称时）
+   * 3. 仅器件名称 + 封装匹配（无供应商编号时）
+   * 4. 编号都为空时，仅按器件名称 + 封装匹配
+   * @param {Object} component - BOM组件对象
+   * @returns {Object} 匹配结果，包含 exists（是否匹配）、devices（匹配到的器件列表）
+   */
   const getDeviceMatchInfo = (component) => {
     console.log(`\n=== getDeviceMatchInfo 开始 ===`);
     console.log(`组件名称: ${component.name}`);
@@ -314,6 +443,10 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     console.log(`组件器件名称: ${component.deviceName}`);
     console.log(`组件封装: ${component.package}`);
 
+    /**
+     * 检查封装是否匹配
+     * 比较时会去除前导零，如 "0805" 和 "805" 视为匹配
+     */
     const checkPackageMatch = (devicePackage, componentPackage) => {
       if (!componentPackage || !devicePackage) return true;
       const normalizedDevicePackage = devicePackage.replace(/^0+/, '');
@@ -334,6 +467,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       const devName = device.name || '';
       const devSupplierId = device.supplierId || '';
 
+      // 规则1：供应商编号 + 器件名称 + 封装 都匹配
       if (compSupplierId && devSupplierId && compName && devName) {
         const supplierMatch = devSupplierId === compSupplierId;
         const nameMatch = devName === compName;
@@ -350,6 +484,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         }
       }
 
+      // 规则2：仅供应商编号 + 封装匹配（BOM组件无器件名称时）
       if (compSupplierId && devSupplierId && !compName) {
         if (devSupplierId === compSupplierId) {
           const packageMatch = checkPackageMatch(
@@ -361,6 +496,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         }
       }
 
+      // 规则3：仅器件名称 + 封装匹配（BOM组件无供应商编号时）
       if (compName && devName && !compSupplierId) {
         if (devName === compName) {
           const packageMatch = checkPackageMatch(
@@ -372,6 +508,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         }
       }
 
+      // 规则4：编号都为空时，仅按器件名称 + 封装匹配
       if (!compSupplierId && !devSupplierId && compName && devName) {
         if (devName === compName) {
           const packageMatch = checkPackageMatch(
@@ -401,17 +538,32 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     };
   };
 
+  /**
+   * 判断BOM组件是否已在器件架中
+   * @param {Object} component - BOM组件对象
+   * @returns {boolean} 是否在器件架中
+   */
   const isDeviceInShelf = (component) => {
     const matchInfo = getDeviceMatchInfo(component);
     return matchInfo.exists;
   };
 
+  // ==================== 器件交互操作 ====================
+
+  /**
+   * 点击BOM列表项时的处理
+   * 已连接蓝牙时，点击切换对应器件的亮灯/灭灯状态
+   * 支持同时操作多个匹配的器件
+   * @param {Object} component - 被点击的BOM组件
+   */
   const handleComponentPress = async (component) => {
+    // 检查蓝牙连接
     if (!global.deviceConnection) {
       Alert.alert('提示', '请先在连接页面连接蓝牙设备');
       return;
     }
 
+    // 操作锁，防止重复点击
     if (isOperatingRef.current) return;
     isOperatingRef.current = true;
 
@@ -421,12 +573,14 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       return;
     }
 
+    // 判断当前组件的所有匹配器件是否都已亮灯
     const allLit = matchInfo.devices.every(d => litDeviceIds.includes(d.id));
 
     try {
       const { handler } = global.deviceConnection;
 
       if (allLit) {
+        // 全部已亮灯 → 逐个熄灭
         for (const targetDevice of matchInfo.devices) {
           let hardwarePosition;
           if (targetDevice.location != null && targetDevice.location !== '') {
@@ -445,6 +599,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
           await new Promise(resolve => setTimeout(resolve, 300));
         }
       } else {
+        // 未全部亮灯 → 逐个点亮
         for (const targetDevice of matchInfo.devices) {
           let hardwarePosition;
           if (targetDevice.location != null && targetDevice.location !== '') {
@@ -470,6 +625,12 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     }
   };
 
+  // ==================== 位置选择器相关 ====================
+
+  /**
+   * 获取器件架中已占用的位置映射
+   * @returns {Map} 位置编号 → 器件名称的映射
+   */
   const getOccupiedPositions = () => {
     const occupied = new Map();
     devices
@@ -483,6 +644,10 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     return occupied;
   };
 
+  /**
+   * 获取所有位置信息（0-89，共90个位置，分3排）
+   * @returns {Array} 位置信息数组，每项包含 position、isOccupied、deviceName
+   */
   const getAllPositions = () => {
     const occupied = getOccupiedPositions();
     const positions = [];
@@ -496,6 +661,11 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     return positions;
   };
 
+  /**
+   * 点击"上架"按钮，打开位置选择器
+   * 前置条件：必须已连接蓝牙设备
+   * @param {Object} component - 待上架的BOM组件
+   */
   const handleShelfDevice = (component) => {
     if (!global.deviceConnection) {
       Alert.alert('提示', '请先在连接页面连接蓝牙设备');
@@ -505,17 +675,23 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     setShowPositionPicker(true);
   };
 
+  /**
+   * 选择位置后，将器件上架到指定位置
+   * 上架成功后自动点亮该位置的灯光，方便用户确认
+   * @param {number} position - 选择的位置编号
+   */
   const handleSelectPosition = async (position) => {
     if (!pendingComponent) return;
 
     try {
+      // 构建新器件数据
       const newDevice = {
         name: pendingComponent.deviceName || pendingComponent.name,
         supplierId: pendingComponent.supplierId || '',
         package: pendingComponent.package || '',
         position: pendingComponent.position || '',
         category: pendingComponent.category || '',
-        function: pendingComponent.description || '',
+        notes: pendingComponent.description || '',
         value: pendingComponent.value || '',
         resistance: pendingComponent.resistance || '',
         voltage: pendingComponent.voltage || '',
@@ -528,10 +704,12 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         location: String(position),
       };
 
+      // 保存到本地存储并刷新器件列表
       await StorageService.addDevice(newDevice);
       const updatedDevices = await StorageService.getDevices();
       setDevices(updatedDevices);
 
+      // 熄灭之前的灯光，点亮新位置的灯光
       if (currentLitPosition.current !== null) {
         await sendLightCommand('lightOff', currentLitPosition.current);
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -547,6 +725,11 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     }
   };
 
+  /**
+   * 自动点亮所有在器件架中匹配到的器件
+   * 用于BOM导入后快速定位所有已有器件的位置
+   * @param {Array} importedComponents - 要点亮的组件列表，默认为当前导入的所有组件
+   */
   const autoLightAllSufficientDevices = async (
     importedComponents = components
   ) => {
@@ -569,6 +752,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       );
     });
 
+    // 收集所有需要点亮的器件（去重）
     const devicesToLight = [];
 
     for (const component of importedComponents) {
@@ -595,11 +779,13 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     let successCount = 0;
     let failCount = 0;
 
+    // 逐个发送点亮指令，每次间隔500ms避免指令冲突
     for (const { device, component } of devicesToLight) {
       console.log(`\n处理器件: ${device.name}`);
       console.log(`组件名称: ${component.name}`);
       console.log(`器件ID: ${device.id}, 位号: ${device.position}`);
 
+      // 计算硬件位置：优先使用location字段，否则使用数组索引
       let hardwarePosition;
       if (device.location != null && device.location !== '') {
         const parsedLocation = parseInt(device.location, 10);
@@ -637,8 +823,11 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     );
   };
 
+  // ==================== 界面渲染 ====================
+
   return (
     <View style={styles.container}>
+      {/* 页面标题栏 */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>BOM 配单</Text>
       </View>
@@ -646,6 +835,8 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
       <ScrollView style={styles.content}>
         <View style={styles.componentsList}>
           <Text style={styles.label}>器件列表</Text>
+
+          {/* 搜索输入框 */}
           <View style={styles.searchInputContainer}>
             <TextInput
               style={styles.searchInput}
@@ -654,23 +845,30 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
               onChangeText={setSearchQuery}
             />
           </View>
+
           {filteredComponents.length > 0 ? (
             filteredComponents.map((component, compIndex) => {
               const matchInfo = getDeviceMatchInfo(component);
+
               if (matchInfo.devices && matchInfo.devices.length > 0) {
+                // ===== 已匹配器件：显示位置信息，可点击亮灯 =====
                 const allLit = matchInfo.devices.every(d => litDeviceIds.includes(d.id));
                 const anyLit = matchInfo.devices.some(d => litDeviceIds.includes(d.id));
+
+                // 根据亮灯状态设置背景色和文字颜色
                 let bgColor, textColor;
                 if (allLit) {
-                  bgColor = '#e8f5e9';
+                  bgColor = '#e8f5e9';    // 全部亮灯：绿色背景
                   textColor = '#2e7d32';
                 } else if (anyLit) {
-                  bgColor = '#fff8e1';
+                  bgColor = '#fff8e1';    // 部分亮灯：黄色背景
                   textColor = '#f57f17';
                 } else {
-                  bgColor = '#ffffff';
+                  bgColor = '#ffffff';    // 未亮灯：白色背景
                   textColor = '#333';
                 }
+
+                // 拼接所有匹配器件的位置文本
                 const positionsText = matchInfo.devices
                   .map(d => {
                     if (d.location != null && d.location !== '') {
@@ -692,10 +890,13 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                     onPress={() => handleComponentPress(component)}
                     activeOpacity={1}
                   >
+                    {/* 序号圆圈 */}
                     <View style={styles.seqCircle}>
                       <Text style={styles.seqText}>{compIndex + 1}</Text>
                     </View>
+                    {/* 器件信息区域 */}
                     <View style={{ flex: 1 }}>
+                      {/* 编号和名称（同一行） */}
                       <View style={styles.rowContainer}>
                         <View style={styles.rowItem}>
                           <Text style={styles.labelText}>编号: </Text>
@@ -706,16 +907,19 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                           <Text style={styles.valueText}>{component.name || 'null'}</Text>
                         </View>
                       </View>
+                      {/* 封装（有值时显示） */}
                       {component.package && (
                         <Text style={styles.deviceInfo}>
                           <Text style={styles.labelText}>封装:</Text>
                           <Text style={styles.valueText}>{component.package}</Text>
                         </Text>
                       )}
+                      {/* 位号 */}
                       <Text style={styles.deviceInfo}>
                         <Text style={styles.labelText}>位号:</Text>
                         <Text style={styles.valueText}>{component.position || '未设置'}</Text>
                       </Text>
+                      {/* 底部行：左侧位置信息，右侧数量 */}
                       <View style={styles.bottomRow}>
                         <Text style={[styles.statusText, { color: textColor }]}>
                           <Text style={styles.labelText}>位置:</Text>
@@ -732,6 +936,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                   </TouchableOpacity>
                 );
               } else {
+                // ===== 未匹配器件：橙色背景，显示上架按钮 =====
                 return (
                   <View
                     key={compIndex}
@@ -740,42 +945,49 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                       { backgroundColor: '#fff3e0' },
                     ]}
                   >
+                    {/* 序号圆圈 */}
                     <View style={styles.seqCircle}>
                       <Text style={styles.seqText}>{compIndex + 1}</Text>
                     </View>
+                    {/* 器件信息区域 */}
                     <View style={{ flex: 1 }}>
-                        <View style={styles.rowContainer}>
-                          <View style={styles.rowItem}>
-                            <Text style={styles.labelText}>编号: </Text>
-                            <Text style={styles.valueText}>{component.supplierId || 'null'}</Text>
-                          </View>
-                          <View style={styles.rowItem}>
-                            <Text style={styles.labelText}>名称: </Text>
-                            <Text style={styles.valueText}>{component.name || 'null'}</Text>
-                          </View>
+                      {/* 编号和名称（同一行） */}
+                      <View style={styles.rowContainer}>
+                        <View style={styles.rowItem}>
+                          <Text style={styles.labelText}>编号: </Text>
+                          <Text style={styles.valueText}>{component.supplierId || 'null'}</Text>
                         </View>
-                        {component.package && (
-                          <Text style={styles.deviceInfo}>
-                            <Text style={styles.labelText}>封装:</Text>
-                            <Text style={styles.valueText}>{component.package}</Text>
-                          </Text>
-                        )}
-                        <Text style={styles.deviceInfo}>
-                          <Text style={styles.labelText}>位号:</Text>
-                          <Text style={styles.valueText}>未设置</Text>
-                        </Text>
-                        <View style={styles.bottomRow}>
-                          <Text style={[styles.statusText, { color: '#ef6c00' }]}>
-                            ✗ 不在器件架中
-                          </Text>
-                          {component.quantity && (
-                            <Text style={styles.quantityText}>
-                              <Text style={styles.labelText}>数量:</Text>
-                              <Text style={styles.valueText}>{component.quantity}</Text>
-                            </Text>
-                          )}
+                        <View style={styles.rowItem}>
+                          <Text style={styles.labelText}>名称: </Text>
+                          <Text style={styles.valueText}>{component.name || 'null'}</Text>
                         </View>
                       </View>
+                      {/* 封装（有值时显示） */}
+                      {component.package && (
+                        <Text style={styles.deviceInfo}>
+                          <Text style={styles.labelText}>封装:</Text>
+                          <Text style={styles.valueText}>{component.package}</Text>
+                        </Text>
+                      )}
+                      {/* 位号（未上架时显示"未设置"） */}
+                      <Text style={styles.deviceInfo}>
+                        <Text style={styles.labelText}>位号:</Text>
+                        <Text style={styles.valueText}>未设置</Text>
+                      </Text>
+                      {/* 底部行：左侧状态提示，右侧数量 */}
+                      <View style={styles.bottomRow}>
+                        <Text style={[styles.statusText, { color: '#ef6c00' }]}>
+                          ✗ 不在器件架中
+                        </Text>
+                        {component.quantity && (
+                          <Text style={styles.quantityText}>
+                            <Text style={styles.labelText}>数量:</Text>
+                            <Text style={styles.valueText}>{component.quantity}</Text>
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                    {/* 上架按钮 */}
                     <TouchableOpacity
                       style={styles.shelfButton}
                       onPress={() => handleShelfDevice(component)}
@@ -787,6 +999,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
               }
             })
           ) : (
+            /* 空列表提示 */
             <Text style={styles.emptyText}>
               {searchQuery.trim()
                 ? '未找到匹配的组件'
@@ -797,6 +1010,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
           )}
         </View>
 
+        {/* 导入BOM文件按钮 */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={[styles.button, styles.importButton]}
@@ -810,6 +1024,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         </View>
       </ScrollView>
 
+      {/* 位置选择弹窗：用于上架器件时选择物理位置 */}
       <Modal
         visible={showPositionPicker}
         transparent={true}
@@ -819,14 +1034,17 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>选择物理位置</Text>
+            {/* 显示待上架器件名称 */}
             {pendingComponent && (
               <Text style={styles.modalSubtitle}>
                 {pendingComponent.deviceName || pendingComponent.name}
               </Text>
             )}
+            {/* 位置网格，分3排展示，每排30个位置 */}
             <ScrollView style={styles.positionGrid}>
               {Array.from({ length: 3 }, (_, bankIndex) => (
                 <View key={bankIndex}>
+                  {/* 排号标题，可折叠展开 */}
                   <TouchableOpacity
                     style={styles.positionBankHeader}
                     onPress={() => setExpandedBank(expandedBank === bankIndex ? null : bankIndex)}
@@ -838,6 +1056,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                       {expandedBank === bankIndex ? '▲' : '▼'}
                     </Text>
                   </TouchableOpacity>
+                  {/* 展开后显示该排的所有位置格子 */}
                   {expandedBank === bankIndex && (
                     <View style={styles.positionGridInner}>
                       {getAllPositions()
@@ -850,7 +1069,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                               posInfo.isOccupied ? styles.positionItemOccupied : styles.positionItemEmpty,
                             ]}
                             onPress={() => {
-                              if (posInfo.isOccupied) return;
+                              if (posInfo.isOccupied) return;  // 已占用的位置不可选择
                               handleSelectPosition(posInfo.position);
                             }}
                             activeOpacity={posInfo.isOccupied ? 1 : 0.7}
@@ -863,6 +1082,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                             >
                               {posInfo.position}
                             </Text>
+                            {/* 已占用的位置显示器件名称 */}
                             {posInfo.isOccupied && (
                               <Text style={styles.positionItemDeviceName} numberOfLines={1}>
                                 {posInfo.deviceName}
@@ -875,6 +1095,7 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                 </View>
               ))}
             </ScrollView>
+            {/* 取消按钮：关闭弹窗并熄灭灯光 */}
             <TouchableOpacity
               style={styles.modalCancelButton}
               onPress={() => {
@@ -891,6 +1112,8 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
     </View>
   );
 };
+
+// ==================== 样式定义 ====================
 
 const styles = StyleSheet.create({
   container: {
@@ -920,6 +1143,7 @@ const styles = StyleSheet.create({
   componentsList: {
     marginBottom: 20,
   },
+  /* 列表项容器：水平排列，左侧序号+信息，右侧操作按钮 */
   componentItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -931,6 +1155,7 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     marginBottom: 8,
   },
+  /* 序号圆圈 */
   seqCircle: {
     width: 28,
     height: 28,
@@ -949,6 +1174,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  /* 信息行容器：编号和名称并排显示 */
   rowContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -958,37 +1184,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  /* 标签文字（如"编号:"、"名称:"） */
   labelText: {
     fontSize: 12,
     color: '#888',
     marginRight: 4,
   },
+  /* 值文字（如具体编号、名称值） */
   valueText: {
     fontSize: 13,
     color: '#333',
     fontWeight: '500',
   },
+  /* 器件信息行（封装、位号等） */
   deviceInfo: {
     fontSize: 12,
     color: '#666',
     marginTop: 4,
   },
+  /* 状态文字（位置、亮灯状态等） */
   statusText: {
     fontSize: 12,
     fontWeight: '500',
     marginTop: 2,
   },
+  /* 底部行：左侧位置/状态，右侧数量 */
   bottomRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 2,
   },
+  /* 数量文字样式（蓝色突出显示） */
   quantityText: {
     fontSize: 12,
     fontWeight: '500',
     color: '#1976d2',
   },
+  /* 空列表提示文字 */
   emptyText: {
     fontSize: 14,
     color: '#666',
@@ -1000,6 +1233,7 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
     borderStyle: 'dashed',
   },
+  /* 按钮容器 */
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1012,6 +1246,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 5,
   },
+  /* 导入按钮（橙色） */
   importButton: {
     backgroundColor: '#ff9800',
   },
@@ -1020,6 +1255,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  /* 上架按钮（蓝色） */
   shelfButton: {
     backgroundColor: '#1976d2',
     paddingHorizontal: 14,
@@ -1033,6 +1269,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  /* ===== 位置选择弹窗样式 ===== */
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1061,6 +1298,7 @@ const styles = StyleSheet.create({
   positionGrid: {
     maxHeight: 350,
   },
+  /* 排号折叠标题 */
   positionBankHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1081,11 +1319,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
   },
+  /* 位置格子容器 */
   positionGridInner: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
   },
+  /* 单个位置格子 */
   positionItem: {
     width: '18%',
     height: 48,
@@ -1096,10 +1336,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     borderWidth: 1,
   },
+  /* 空位置（蓝色） */
   positionItemEmpty: {
     backgroundColor: '#e3f2fd',
     borderColor: '#bbdefb',
   },
+  /* 已占用位置（绿色） */
   positionItemOccupied: {
     backgroundColor: '#e8f5e9',
     borderColor: '#a5d6a7',
@@ -1114,11 +1356,13 @@ const styles = StyleSheet.create({
   positionItemTextOccupied: {
     color: '#2e7d32',
   },
+  /* 已占用位置下方显示的器件名称 */
   positionItemDeviceName: {
     fontSize: 8,
     color: '#4caf50',
     marginTop: 1,
   },
+  /* 弹窗取消按钮 */
   modalCancelButton: {
     marginTop: 16,
     paddingVertical: 12,
@@ -1131,6 +1375,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  /* 搜索输入框 */
   searchInputContainer: {
     marginBottom: 16,
   },
