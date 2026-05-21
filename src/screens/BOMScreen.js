@@ -1072,6 +1072,17 @@ const BOMScreen = ({ navigation, isAdmin = false }) => {
                               if (posInfo.isOccupied) return;  // 已占用的位置不可选择
                               handleSelectPosition(posInfo.position);
                             }}
+                            onLongPress={async () => {
+                              if (posInfo.isOccupied) return;
+                              if (global.deviceConnection && global.deviceConnection.handler) {
+                                if (currentLitPosition.current !== null) {
+                                  await sendLightCommand('lightOff', currentLitPosition.current);
+                                  await new Promise(resolve => setTimeout(resolve, 300));
+                                }
+                                await sendLightCommand('lightOn', posInfo.position);
+                                currentLitPosition.current = posInfo.position;
+                              }
+                            }}
                             activeOpacity={posInfo.isOccupied ? 1 : 0.7}
                           >
                             <Text

@@ -689,6 +689,17 @@ const AdminEditScreen = ({ navigation, route }) => {
                                 });
                                 setShowPositionPicker(false);
                               }}
+                              onLongPress={async () => {
+                                if (posInfo.isOccupied && !isCurrentPosition) return;
+                                if (global.deviceConnection && global.deviceConnection.handler) {
+                                  if (currentLitPosition.current !== null) {
+                                    await sendLightCommand('lightOff', currentLitPosition.current);
+                                    await new Promise(resolve => setTimeout(resolve, 300));
+                                  }
+                                  await sendLightCommand('lightOn', posInfo.position);
+                                  currentLitPosition.current = posInfo.position;
+                                }
+                              }}
                               activeOpacity={posInfo.isOccupied && !isCurrentPosition ? 1 : 0.7}
                             >
                               <Text

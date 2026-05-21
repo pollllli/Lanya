@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Modal, Alert, ScrollView } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Audio } from 'expo-av';
 import StorageService from '../services/StorageService';
@@ -9,12 +9,17 @@ const ScanScreen = ({ navigation, route }) => {
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showPositionPicker, setShowPositionPicker] = useState(false);
+  const [expandedBank, setExpandedBank] = useState(null);
   const [currentDeviceInfo, setCurrentDeviceInfo] = useState(null);
   const [currentEmptyPosition, setCurrentEmptyPosition] = useState(null);
+  const [occupiedPositions, setOccupiedPositions] = useState(new Map());
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const scanningRef = useRef(false);
   const currentLitPosition = useRef(null);
   const soundRef = useRef(null);
+  // 暂存扫码解析出的器件数据（确认后才保存）
+  const pendingDeviceRef = useRef(null);
 
   useEffect(() => {
     const loadSound = async () => {
@@ -103,6 +108,38 @@ const ScanScreen = ({ navigation, route }) => {
     return null;
   };
 
+  /**
+   * 加载已占用的位置映射（用于位置选择器）
+   */
+  const loadOccupiedPositions = async () => {
+    const devices = await StorageService.getDevices();
+    const occupied = new Map();
+    devices
+      .filter(d => d.shelfId === '1' && d.location != null && d.location !== '')
+      .forEach(d => {
+        const pos = parseInt(d.location, 10);
+        if (!isNaN(pos)) {
+          occupied.set(pos, d.name || '未知');
+        }
+      });
+    setOccupiedPositions(occupied);
+  };
+
+  /**
+   * 获取所有位置信息（0-89，共90个位置，分3排）
+   */
+  const getAllPositions = () => {
+    const positions = [];
+    for (let i = 0; i < 90; i++) {
+      positions.push({
+        position: i,
+        isOccupied: occupiedPositions.has(i),
+        deviceName: occupiedPositions.get(i) || '',
+      });
+    }
+    return positions;
+  };
+
   const parseQRCode = (data) => {
     try {
       const result = {};
@@ -177,6 +214,7 @@ const ScanScreen = ({ navigation, route }) => {
         }
       }
 
+      // 暂存器件数据，不立即保存
       const newDevice = {
         name: deviceName || '',
         supplierId: supplierId,
@@ -196,10 +234,11 @@ const ScanScreen = ({ navigation, route }) => {
         location: String(emptyPosition),
       };
 
-      await StorageService.addDevice(newDevice);
+      pendingDeviceRef.current = newDevice;
 
       playBeep();
 
+      // 点亮第一个空位置
       if (currentLitPosition.current !== null) {
         await sendLightCommand('lightOff', currentLitPosition.current);
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -211,24 +250,91 @@ const ScanScreen = ({ navigation, route }) => {
       setCurrentEmptyPosition(emptyPosition);
       setShowConfirmModal(true);
     } catch (error) {
-      showToast('保存失败');
+      showToast('扫码处理失败');
       scanningRef.current = true;
     }
   };
 
+  /**
+   * 确认上架到第一个空位置
+   */
   const handleConfirm = async () => {
+    try {
+      if (pendingDeviceRef.current) {
+        await StorageService.addDevice(pendingDeviceRef.current);
+        pendingDeviceRef.current = null;
+      }
+      if (currentLitPosition.current !== null) {
+        await sendLightCommand('lightOff', currentLitPosition.current);
+        currentLitPosition.current = null;
+      }
+      setShowConfirmModal(false);
+      setCurrentDeviceInfo(null);
+      setCurrentEmptyPosition(null);
+      showToast('上架成功');
+      setTimeout(() => {
+        scanningRef.current = true;
+      }, 2000);
+    } catch (error) {
+      showToast('上架失败');
+      scanningRef.current = true;
+    }
+  };
+
+  /**
+   * 打开位置选择器
+   */
+  const handleOpenPositionPicker = async () => {
+    await loadOccupiedPositions();
+    setShowConfirmModal(false);
+    setExpandedBank(null);
+    setShowPositionPicker(true);
+  };
+
+  /**
+   * 从位置选择器选择位置后上架
+   */
+  const handleSelectPosition = async (position) => {
+    try {
+      if (pendingDeviceRef.current) {
+        // 更新位置
+        pendingDeviceRef.current.location = String(position);
+        await StorageService.addDevice(pendingDeviceRef.current);
+        pendingDeviceRef.current = null;
+      }
+
+      // 熄灭之前的灯光，点亮新位置
+      if (currentLitPosition.current !== null) {
+        await sendLightCommand('lightOff', currentLitPosition.current);
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      await sendLightCommand('lightOn', position);
+      currentLitPosition.current = position;
+
+      setShowPositionPicker(false);
+      setCurrentDeviceInfo(null);
+      setCurrentEmptyPosition(null);
+      showToast(`上架成功，位置 ${position}`);
+      setTimeout(() => {
+        scanningRef.current = true;
+      }, 2000);
+    } catch (error) {
+      showToast('上架失败');
+      scanningRef.current = true;
+    }
+  };
+
+  /**
+   * 位置选择器中点击位置格子时预览亮灯
+   */
+  const handlePositionPreview = async (posInfo) => {
+    if (posInfo.isOccupied) return;
     if (currentLitPosition.current !== null) {
       await sendLightCommand('lightOff', currentLitPosition.current);
-      currentLitPosition.current = null;
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
-    setShowConfirmModal(false);
-    setCurrentDeviceInfo(null);
-    setCurrentEmptyPosition(null);
-    scanningRef.current = false;
-    showToast('已确认，请移开摄像头');
-    setTimeout(() => {
-      scanningRef.current = true;
-    }, 2000);
+    await sendLightCommand('lightOn', posInfo.position);
+    currentLitPosition.current = posInfo.position;
   };
 
   const handleCancel = () => {
@@ -237,6 +343,36 @@ const ScanScreen = ({ navigation, route }) => {
       currentLitPosition.current = null;
     }
     navigation.navigate('MainTabs', { screen: 'DeviceListTab' });
+  };
+
+  /**
+   * 取消确认弹窗（放弃本次扫码上架）
+   */
+  const handleCancelConfirm = () => {
+    pendingDeviceRef.current = null;
+    if (currentLitPosition.current !== null) {
+      sendLightCommand('lightOff', currentLitPosition.current);
+      currentLitPosition.current = null;
+    }
+    setShowConfirmModal(false);
+    setCurrentDeviceInfo(null);
+    setCurrentEmptyPosition(null);
+    scanningRef.current = true;
+  };
+
+  /**
+   * 关闭位置选择器，回到确认弹窗（保持灯光不熄灭）
+   */
+  const handleCancelPositionPicker = () => {
+    setShowPositionPicker(false);
+    setShowConfirmModal(true);
+  };
+
+  const turnOffCurrentLight = async () => {
+    if (currentLitPosition.current !== null) {
+      await sendLightCommand('lightOff', currentLitPosition.current);
+      currentLitPosition.current = null;
+    }
   };
 
   if (!permission) {
@@ -294,6 +430,7 @@ const ScanScreen = ({ navigation, route }) => {
         </Animated.View>
       )}
 
+      {/* 扫码确认弹窗 */}
       <Modal
         visible={showConfirmModal}
         transparent={true}
@@ -302,7 +439,7 @@ const ScanScreen = ({ navigation, route }) => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>上架成功</Text>
+            <Text style={styles.modalTitle}>扫码识别成功</Text>
             <View style={styles.modalBody}>
               <Text style={styles.modalText}>
                 器件名称：{currentDeviceInfo?.name || '未命名'}
@@ -311,14 +448,105 @@ const ScanScreen = ({ navigation, route }) => {
                 供应商编号：{currentDeviceInfo?.supplierId || 'N/A'}
               </Text>
               <Text style={styles.modalText}>
-                上架位置：{currentEmptyPosition || 'N/A'}
+                默认位置：{currentEmptyPosition ?? 'N/A'}
               </Text>
             </View>
+            <View style={styles.confirmButtonRow}>
+              <TouchableOpacity
+                style={styles.cancelConfirmButton}
+                onPress={handleCancelConfirm}
+              >
+                <Text style={styles.cancelConfirmButtonText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.positionButton}
+                onPress={handleOpenPositionPicker}
+              >
+                <Text style={styles.positionButtonText}>位置</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={handleConfirm}
+              >
+                <Text style={styles.confirmButtonText}>确认</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 位置选择弹窗 */}
+      <Modal
+        visible={showPositionPicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleCancelPositionPicker}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.positionModalContent}>
+            <Text style={styles.modalTitle}>选择物理位置</Text>
+            {pendingDeviceRef.current && (
+              <Text style={styles.positionModalSubtitle}>
+                {pendingDeviceRef.current.name || pendingDeviceRef.current.supplierId}
+              </Text>
+            )}
+            <ScrollView style={styles.positionGrid}>
+              {Array.from({ length: 3 }, (_, bankIndex) => (
+                <View key={bankIndex}>
+                  <TouchableOpacity
+                    style={styles.positionBankHeader}
+                    onPress={() => setExpandedBank(expandedBank === bankIndex ? null : bankIndex)}
+                  >
+                    <Text style={styles.positionBankHeaderText}>
+                      第{bankIndex + 1}排（位置 {bankIndex * 30}-{bankIndex * 30 + 29}）
+                    </Text>
+                    <Text style={styles.positionBankHeaderArrow}>
+                      {expandedBank === bankIndex ? '▲' : '▼'}
+                    </Text>
+                  </TouchableOpacity>
+                  {expandedBank === bankIndex && (
+                    <View style={styles.positionGridInner}>
+                      {getAllPositions()
+                        .slice(bankIndex * 30, (bankIndex + 1) * 30)
+                        .map((posInfo) => (
+                          <TouchableOpacity
+                            key={posInfo.position}
+                            style={[
+                              styles.positionItem,
+                              posInfo.isOccupied ? styles.positionItemOccupied : styles.positionItemEmpty,
+                            ]}
+                            onPress={() => {
+                              if (posInfo.isOccupied) return;
+                              handleSelectPosition(posInfo.position);
+                            }}
+                            onLongPress={() => handlePositionPreview(posInfo)}
+                            activeOpacity={posInfo.isOccupied ? 1 : 0.7}
+                          >
+                            <Text
+                              style={[
+                                styles.positionItemText,
+                                posInfo.isOccupied ? styles.positionItemTextOccupied : styles.positionItemTextEmpty,
+                              ]}
+                            >
+                              {posInfo.position}
+                            </Text>
+                            {posInfo.isOccupied && (
+                              <Text style={styles.positionItemDeviceName} numberOfLines={1}>
+                                {posInfo.deviceName}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
             <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={handleConfirm}
+              style={styles.modalCancelButton}
+              onPress={handleCancelPositionPicker}
             >
-              <Text style={styles.confirmButtonText}>确认</Text>
+              <Text style={styles.modalCancelButtonText}>取消</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -503,18 +731,134 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: 'center',
   },
+  /* 确认弹窗按钮行：取消、位置、确认 */
+  confirmButtonRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 10,
+  },
+  cancelConfirmButton: {
+    flex: 1,
+    backgroundColor: '#8E8E93',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelConfirmButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  positionButton: {
+    flex: 1,
+    backgroundColor: '#1976d2',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  positionButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   confirmButton: {
+    flex: 1,
     backgroundColor: '#4caf50',
     paddingVertical: 12,
-    paddingHorizontal: 48,
     borderRadius: 8,
-    width: '100%',
     alignItems: 'center',
   },
   confirmButtonText: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
+  },
+  /* ===== 位置选择弹窗样式 ===== */
+  positionModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    width: '85%',
+    maxHeight: '70%',
+  },
+  positionModalSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  positionGrid: {
+    maxHeight: 350,
+  },
+  positionBankHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  positionBankHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  positionBankHeaderArrow: {
+    fontSize: 12,
+    color: '#666',
+  },
+  positionGridInner: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+  },
+  positionItem: {
+    width: '18%',
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 6,
+    marginHorizontal: '1%',
+    marginBottom: 6,
+    borderWidth: 1,
+  },
+  positionItemEmpty: {
+    backgroundColor: '#e3f2fd',
+    borderColor: '#bbdefb',
+  },
+  positionItemOccupied: {
+    backgroundColor: '#e8f5e9',
+    borderColor: '#a5d6a7',
+  },
+  positionItemText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  positionItemTextEmpty: {
+    color: '#1976d2',
+  },
+  positionItemTextOccupied: {
+    color: '#2e7d32',
+  },
+  positionItemDeviceName: {
+    fontSize: 8,
+    color: '#4caf50',
+    marginTop: 1,
+  },
+  modalCancelButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#8E8E93',
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 
