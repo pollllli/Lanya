@@ -292,15 +292,13 @@ const ScanScreen = ({ navigation, route }) => {
   };
 
   /**
-   * 从位置选择器选择位置后上架
+   * 从位置选择器选择位置后，仅更新位置变量，回到确认弹窗
    */
   const handleSelectPosition = async (position) => {
     try {
+      // 只更新位置变量，不直接上架
       if (pendingDeviceRef.current) {
-        // 更新位置
         pendingDeviceRef.current.location = String(position);
-        await StorageService.addDevice(pendingDeviceRef.current);
-        pendingDeviceRef.current = null;
       }
 
       // 熄灭之前的灯光，点亮新位置
@@ -311,16 +309,12 @@ const ScanScreen = ({ navigation, route }) => {
       await sendLightCommand('lightOn', position);
       currentLitPosition.current = position;
 
+      // 回到确认弹窗，显示新选择的位置
+      setCurrentEmptyPosition(position);
       setShowPositionPicker(false);
-      setCurrentDeviceInfo(null);
-      setCurrentEmptyPosition(null);
-      showToast(`上架成功，位置 ${position}`);
-      setTimeout(() => {
-        scanningRef.current = true;
-      }, 2000);
+      setShowConfirmModal(true);
     } catch (error) {
-      showToast('上架失败');
-      scanningRef.current = true;
+      showToast('位置选择失败');
     }
   };
 
@@ -448,15 +442,15 @@ const ScanScreen = ({ navigation, route }) => {
                 供应商编号：{currentDeviceInfo?.supplierId || 'N/A'}
               </Text>
               <Text style={styles.modalText}>
-                默认位置：{currentEmptyPosition ?? 'N/A'}
+                上架位置：{currentEmptyPosition ?? 'N/A'}
               </Text>
             </View>
             <View style={styles.confirmButtonRow}>
               <TouchableOpacity
-                style={styles.cancelConfirmButton}
-                onPress={handleCancelConfirm}
+                style={styles.confirmButton}
+                onPress={handleConfirm}
               >
-                <Text style={styles.cancelConfirmButtonText}>取消</Text>
+                <Text style={styles.confirmButtonText}>确认</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.positionButton}
@@ -465,10 +459,10 @@ const ScanScreen = ({ navigation, route }) => {
                 <Text style={styles.positionButtonText}>位置</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={handleConfirm}
+                style={styles.cancelConfirmButton}
+                onPress={handleCancelConfirm}
               >
-                <Text style={styles.confirmButtonText}>确认</Text>
+                <Text style={styles.cancelConfirmButtonText}>取消</Text>
               </TouchableOpacity>
             </View>
           </View>
