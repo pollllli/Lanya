@@ -950,6 +950,18 @@ const DeviceListScreen = ({ navigation, route, isAdmin = false }) => {
                 <Text style={styles.cancelButtonText}>取消</Text>
               </TouchableOpacity>
               <TouchableOpacity
+                style={styles.selectAllButton}
+                onPress={() => {
+                  const allIds = filteredDevices.map(d => d.id);
+                  const allSelected = allIds.length > 0 && allIds.every(id => selectedDevices.includes(id));
+                  dispatch({ type: 'SET_SELECTED_DEVICES', payload: allSelected ? [] : allIds });
+                }}
+              >
+                <Text style={styles.selectAllButtonText}>
+                  {filteredDevices.length > 0 && filteredDevices.every(d => selectedDevices.includes(d.id)) ? '取消全选' : '全选'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={[
                   styles.deleteButton,
                   selectedDevices.length === 0 && styles.disabledButton,
@@ -1529,7 +1541,7 @@ const styles = StyleSheet.create({
   cancelButton: {
     backgroundColor: '#8E8E93',
     flex: 1,
-    marginRight: 8,
+    marginRight: 4,
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -1539,10 +1551,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
+  selectAllButton: {
+    backgroundColor: '#1976d2',
+    flex: 1,
+    marginHorizontal: 4,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  selectAllButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
   deleteButton: {
     backgroundColor: '#FF3B30',
     flex: 1,
-    marginLeft: 8,
+    marginLeft: 4,
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
