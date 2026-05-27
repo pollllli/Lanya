@@ -26,8 +26,10 @@ export const UserProvider = ({ children }) => {
   useEffect(() => {
     const initApp = async () => {
       try {
-        const loggedInUser = await StorageService.getLoggedInUser();
-        setUser(loggedInUser);
+        // 始终以 admin 管理员身份自动登录
+        const adminUser = { username: 'admin', password: 'admin', isAdmin: true };
+        await StorageService.saveLoggedInUser(adminUser);
+        setUser(adminUser);
       } catch (error) {
         logError('初始化应用失败', error, 'UserProvider.initApp');
       } finally {

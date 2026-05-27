@@ -97,43 +97,33 @@ const DeviceDetailScreen = ({ navigation, route }) => {
         </View>
         <Text style={styles.deviceName}>{device.name}</Text>
 
-        <View style={styles.specContainer}>
-          {device.resistance && (
-            <View style={styles.specItem}>
-              <Text style={styles.specLabel}>电阻:</Text>
-              <Text style={styles.specValue}>{device.resistance}</Text>
-            </View>
-          )}
-          {device.voltage && (
-            <View style={styles.specItem}>
-              <Text style={styles.specLabel}>电压:</Text>
-              <Text style={styles.specValue}>{device.voltage}</Text>
-            </View>
-          )}
-          {device.capacitance && (
-            <View style={styles.specItem}>
-              <Text style={styles.specLabel}>电容:</Text>
-              <Text style={styles.specValue}>{device.capacitance}</Text>
-            </View>
-          )}
-          {device.inductance && (
-            <View style={styles.specItem}>
-              <Text style={styles.specLabel}>电感:</Text>
-              <Text style={styles.specValue}>{device.inductance}</Text>
-            </View>
-          )}
-          {device.current && (
-            <View style={styles.specItem}>
-              <Text style={styles.specLabel}>电流:</Text>
-              <Text style={styles.specValue}>{device.current}</Text>
-            </View>
-          )}
-          {device.notes && (
-            <View style={styles.specItem}>
-              <Text style={styles.specLabel}>备注:</Text>
-              <Text style={styles.specValue}>{device.notes}</Text>
-            </View>
-          )}
+        {/* 基本信息 */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>基本信息</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>编号</Text>
+            <Text style={styles.infoValue}>{device.supplierId || device.id || '-'}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>名称</Text>
+            <Text style={styles.infoValue}>{device.name || '-'}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>类别</Text>
+            <Text style={styles.infoValue}>{device.category || '-'}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>封装</Text>
+            <Text style={styles.infoValue}>{device.package || '-'}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>位置</Text>
+            <Text style={styles.infoValue}>{device.location != null && device.location !== '' ? device.location : '-'}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>备注</Text>
+            <Text style={styles.infoValue}>{device.notes || '-'}</Text>
+          </View>
         </View>
 
         <View style={styles.buttonContainer}>
@@ -224,21 +214,32 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 24,
   },
-  specContainer: {
+  sectionContainer: {
     marginBottom: 28,
   },
-  specItem: {
-    flexDirection: 'row',
-    marginBottom: 16,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
-  specLabel: {
+  infoRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  infoLabel: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#666',
     width: 60,
   },
-  specValue: {
+  infoValue: {
     fontSize: 16,
     color: '#333',
+    flex: 1,
   },
   buttonContainer: {
     flexDirection: 'row',

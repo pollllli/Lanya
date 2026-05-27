@@ -5,22 +5,34 @@ import { Audio } from 'expo-av';
 import StorageService from '../services/StorageService';
 
 const ScanScreen = ({ navigation, route }) => {
+  // 相机权限
   const [permission, requestPermission] = useCameraPermissions();
+  // 提示消息相关状态
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
+  // 确认弹窗与位置选择弹窗的显示状态
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showPositionPicker, setShowPositionPicker] = useState(false);
+  // 当前展开的排（位置选择器中3排的展开/折叠）
   const [expandedBank, setExpandedBank] = useState(null);
+  // 当前扫码识别到的器件信息（名称、供应商编号）
   const [currentDeviceInfo, setCurrentDeviceInfo] = useState(null);
+  // 当前上架位置（默认为第一个空位置，用户可通过位置选择器更改）
   const [currentEmptyPosition, setCurrentEmptyPosition] = useState(null);
+  // 已占用的位置映射（位置号 → 器件名称），用于位置选择器显示
   const [occupiedPositions, setOccupiedPositions] = useState(new Map());
+  // 提示消息的透明度动画值
   const toastOpacity = useRef(new Animated.Value(0)).current;
+  // 是否允许扫码（防止重复扫码）
   const scanningRef = useRef(false);
+  // 当前亮灯的位置编号（用于熄灯操作）
   const currentLitPosition = useRef(null);
+  // 扫码提示音引用
   const soundRef = useRef(null);
-  // 暂存扫码解析出的器件数据（确认后才保存）
+  // 暂存扫码解析出的器件数据（确认后才保存到数据库）
   const pendingDeviceRef = useRef(null);
 
+  // 组件挂载时加载扫码提示音
   useEffect(() => {
     const loadSound = async () => {
       try {
@@ -28,13 +40,14 @@ const ScanScreen = ({ navigation, route }) => {
           require('../../assets/scan_beep.wav')
         );
         soundRef.current = sound;
-        scanningRef.current = true;
+        scanningRef.current = true; // 音效加载完成，允许扫码
       } catch (error) {
         console.log('加载音效失败:', error);
-        scanningRef.current = true;
+        scanningRef.current = true; // 即使音效加载失败也允许扫码
       }
     };
     loadSound();
+    // 组件卸载时释放音效资源
     return () => {
       if (soundRef.current) {
         soundRef.current.unloadAsync();
@@ -42,6 +55,7 @@ const ScanScreen = ({ navigation, route }) => {
     };
   }, []);
 
+  // 播放扫码提示音
   const playBeep = async () => {
     try {
       if (soundRef.current) {
@@ -52,6 +66,7 @@ const ScanScreen = ({ navigation, route }) => {
     }
   };
 
+  // 显示提示消息（带淡入淡出动画，1.5秒后自动消失）
   const showToast = (message) => {
     setToastMessage(message);
     setToastVisible(true);
@@ -72,6 +87,7 @@ const ScanScreen = ({ navigation, route }) => {
     });
   };
 
+  // 发送灯光指令（亮灯/熄灯）到蓝牙设备
   const sendLightCommand = async (type, position) => {
     if (!global.deviceConnection || !global.deviceConnection.handler) return;
     try {
@@ -81,6 +97,7 @@ const ScanScreen = ({ navigation, route }) => {
     }
   };
 
+  // 组件卸载时熄灭当前亮着的灯
   useEffect(() => {
     return () => {
       if (currentLitPosition.current !== null) {
@@ -89,6 +106,7 @@ const ScanScreen = ({ navigation, route }) => {
     };
   }, []);
 
+  // 查找器件架1中第一个空位置（0-89）
   const findFirstEmptyPosition = async () => {
     const devices = await StorageService.getDevices();
     const occupiedPositions = new Set();
@@ -105,11 +123,11 @@ const ScanScreen = ({ navigation, route }) => {
         return i;
       }
     }
-    return null;
+    return null; // 器件架已满
   };
 
   /**
-   * 加载已占用的位置映射（用于位置选择器）
+   * 加载已占用的位置映射（用于位置选择器中标记已占用的格子）
    */
   const loadOccupiedPositions = async () => {
     const devices = await StorageService.getDevices();
@@ -126,7 +144,7 @@ const ScanScreen = ({ navigation, route }) => {
   };
 
   /**
-   * 获取所有位置信息（0-89，共90个位置，分3排）
+   * 获取所有位置信息（0-89，共90个位置，分3排，每排30个）
    */
   const getAllPositions = () => {
     const positions = [];
@@ -140,6 +158,7 @@ const ScanScreen = ({ navigation, route }) => {
     return positions;
   };
 
+  // 解析二维码数据（格式：key1:value1,key2:value2,...）
   const parseQRCode = (data) => {
     try {
       const result = {};
@@ -158,22 +177,29 @@ const ScanScreen = ({ navigation, route }) => {
     }
   };
 
+  // 扫码回调：识别到条码/二维码后触发
   const handleBarCodeScanned = async ({ type, data }) => {
+    // 防止重复扫码
     if (!scanningRef.current) return;
+    // 确认弹窗显示时不处理新扫码
     if (showConfirmModal) return;
 
+    // 暂停扫码，直到本次流程结束
     scanningRef.current = false;
 
+    // 解析二维码内容
     const parsed = parseQRCode(data);
-    const supplierId = parsed.pc || '';
-    const deviceName = parsed.pm || '';
+    const supplierId = parsed.pc || '';  // 供应商编号
+    const deviceName = parsed.pm || '';   // 器件名称
 
+    // 校验：必须有供应商编号
     if (!supplierId) {
       showToast('未识别到供应商编号');
       scanningRef.current = true;
       return;
     }
 
+    // 校验：必须连接蓝牙设备才能上架
     if (!global.deviceConnection) {
       Alert.alert('提示', '蓝牙未连接，无法上架器件。请先在连接页面连接蓝牙设备。');
       scanningRef.current = true;
@@ -181,6 +207,7 @@ const ScanScreen = ({ navigation, route }) => {
     }
 
     try {
+      // 查找第一个空位置
       const emptyPosition = await findFirstEmptyPosition();
       if (emptyPosition === null) {
         showToast('器件架已满，没有空位置');
@@ -193,28 +220,36 @@ const ScanScreen = ({ navigation, route }) => {
       // 解析电气参数（支持复合值如 "10uf/50V"）
       const electricalParams = { resistance: '', voltage: '', capacitance: '', inductance: '', current: '', power: '', frequency: '' };
       if (valueStr) {
+        // 按斜杠、逗号、空格拆分复合值
         const parts = valueStr.trim().split(/[/,，\s]+/).filter(p => p.trim());
         for (const part of parts) {
           const v = part.trim();
+          // 电阻（Ω/ohm）
           if (/^\d+\.?\d*\s*[kKMmμuGg]?\s*[ΩΩRr]$/i.test(v) || /^\d+\.?\d*\s*[kKMmμuGg]?\s*ohm$/i.test(v)) {
             electricalParams.resistance = v;
+          // 频率（Hz）
           } else if (/^\d+\.?\d*\s*[kKMmGgT]?\s*[Hh]z$/i.test(v)) {
             electricalParams.frequency = v;
+          // 电容（F）
           } else if (/^\d+\.?\d*\s*[pPnNμuUmM]?\s*[Ff]$/i.test(v)) {
             electricalParams.capacitance = v;
+          // 电感（H）
           } else if (/^\d+\.?\d*\s*[nNμuUmM]?\s*[Hh]$/i.test(v)) {
             electricalParams.inductance = v;
+          // 电压（V）
           } else if (/^\d+\.?\d*\s*[mMkK]?\s*[Vv]$/i.test(v)) {
             electricalParams.voltage = v;
+          // 电流（A）
           } else if (/^\d+\.?\d*\s*[nNμuUmMkK]?\s*[Aa]$/i.test(v)) {
             electricalParams.current = v;
+          // 功率（W）
           } else if (/^\d+\.?\d*\s*[mMkK]?\s*[Ww]$/i.test(v)) {
             electricalParams.power = v;
           }
         }
       }
 
-      // 暂存器件数据，不立即保存
+      // 暂存器件数据，不立即保存（等用户确认后才写入数据库）
       const newDevice = {
         name: deviceName || '',
         supplierId: supplierId,
@@ -236,16 +271,18 @@ const ScanScreen = ({ navigation, route }) => {
 
       pendingDeviceRef.current = newDevice;
 
+      // 播放扫码提示音
       playBeep();
 
-      // 点亮第一个空位置
+      // 点亮第一个空位置的指示灯（先熄灭之前亮着的灯）
       if (currentLitPosition.current !== null) {
         await sendLightCommand('lightOff', currentLitPosition.current);
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 300)); // 等待熄灯完成
       }
       await sendLightCommand('lightOn', emptyPosition);
       currentLitPosition.current = emptyPosition;
 
+      // 显示确认弹窗
       setCurrentDeviceInfo({ name: deviceName, supplierId });
       setCurrentEmptyPosition(emptyPosition);
       setShowConfirmModal(true);
@@ -256,7 +293,7 @@ const ScanScreen = ({ navigation, route }) => {
   };
 
   /**
-   * 确认上架到第一个空位置
+   * 确认上架：将暂存的器件数据保存到数据库，熄灭指示灯
    */
   const handleConfirm = async () => {
     try {
@@ -264,14 +301,17 @@ const ScanScreen = ({ navigation, route }) => {
         await StorageService.addDevice(pendingDeviceRef.current);
         pendingDeviceRef.current = null;
       }
+      // 上架成功后熄灭指示灯
       if (currentLitPosition.current !== null) {
         await sendLightCommand('lightOff', currentLitPosition.current);
         currentLitPosition.current = null;
       }
+      // 关闭确认弹窗，重置状态
       setShowConfirmModal(false);
       setCurrentDeviceInfo(null);
       setCurrentEmptyPosition(null);
       showToast('上架成功');
+      // 延迟2秒后恢复扫码，避免立即重复扫码
       setTimeout(() => {
         scanningRef.current = true;
       }, 2000);
@@ -282,7 +322,7 @@ const ScanScreen = ({ navigation, route }) => {
   };
 
   /**
-   * 打开位置选择器
+   * 打开位置选择器：加载已占用位置，隐藏确认弹窗
    */
   const handleOpenPositionPicker = async () => {
     await loadOccupiedPositions();
@@ -293,15 +333,16 @@ const ScanScreen = ({ navigation, route }) => {
 
   /**
    * 从位置选择器选择位置后，仅更新位置变量，回到确认弹窗
+   * 不会直接上架，需要用户在确认弹窗点击确认才会上架
    */
   const handleSelectPosition = async (position) => {
     try {
-      // 只更新位置变量，不直接上架
+      // 只更新暂存器件的位置变量，不保存到数据库
       if (pendingDeviceRef.current) {
         pendingDeviceRef.current.location = String(position);
       }
 
-      // 熄灭之前的灯光，点亮新位置
+      // 熄灭之前的灯光，点亮新选择的位灯
       if (currentLitPosition.current !== null) {
         await sendLightCommand('lightOff', currentLitPosition.current);
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -319,10 +360,10 @@ const ScanScreen = ({ navigation, route }) => {
   };
 
   /**
-   * 位置选择器中点击位置格子时预览亮灯
+   * 位置选择器中长按位置格子时预览亮灯（不选择，仅亮灯预览）
    */
   const handlePositionPreview = async (posInfo) => {
-    if (posInfo.isOccupied) return;
+    if (posInfo.isOccupied) return; // 已占用的位置不预览
     if (currentLitPosition.current !== null) {
       await sendLightCommand('lightOff', currentLitPosition.current);
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -331,6 +372,7 @@ const ScanScreen = ({ navigation, route }) => {
     currentLitPosition.current = posInfo.position;
   };
 
+  // 返回按钮：熄灭灯光，导航回器件列表页
   const handleCancel = () => {
     if (currentLitPosition.current !== null) {
       sendLightCommand('lightOff', currentLitPosition.current);
@@ -340,7 +382,7 @@ const ScanScreen = ({ navigation, route }) => {
   };
 
   /**
-   * 取消确认弹窗（放弃本次扫码上架）
+   * 取消确认弹窗：放弃本次扫码上架，熄灭灯光，恢复扫码
    */
   const handleCancelConfirm = () => {
     pendingDeviceRef.current = null;
@@ -362,6 +404,7 @@ const ScanScreen = ({ navigation, route }) => {
     setShowConfirmModal(true);
   };
 
+  // 熄灭当前亮着的灯
   const turnOffCurrentLight = async () => {
     if (currentLitPosition.current !== null) {
       await sendLightCommand('lightOff', currentLitPosition.current);
@@ -369,6 +412,7 @@ const ScanScreen = ({ navigation, route }) => {
     }
   };
 
+  // 正在请求相机权限
   if (!permission) {
     return (
       <View style={styles.container}>
@@ -377,6 +421,7 @@ const ScanScreen = ({ navigation, route }) => {
     );
   }
 
+  // 相机权限未授予，显示授权引导页
   if (!permission.granted) {
     return (
       <View style={styles.permissionContainer}>
@@ -391,8 +436,10 @@ const ScanScreen = ({ navigation, route }) => {
     );
   }
 
+  // 主界面：相机预览 + 扫码框 + 弹窗
   return (
     <View style={styles.container}>
+      {/* 相机预览（全屏铺底） */}
       <CameraView
         style={StyleSheet.absoluteFillObject}
         facing="back"
@@ -402,6 +449,7 @@ const ScanScreen = ({ navigation, route }) => {
         }}
       />
 
+      {/* 顶部导航栏 */}
       <View style={styles.topBar}>
         <TouchableOpacity style={styles.backButton} onPress={handleCancel}>
           <Text style={styles.backButtonText}>← 返回</Text>
@@ -410,6 +458,7 @@ const ScanScreen = ({ navigation, route }) => {
         <View style={styles.placeholder} />
       </View>
 
+      {/* 扫码框（四角绿色边框 + 提示文字） */}
       <View style={styles.scanFrame}>
         <View style={styles.frameCornerTopLeft} />
         <View style={styles.frameCornerTopRight} />
@@ -418,13 +467,14 @@ const ScanScreen = ({ navigation, route }) => {
         <Text style={styles.scanHint}>将二维码/条形码对准扫描框</Text>
       </View>
 
+      {/* 提示消息（带淡入淡出动画） */}
       {toastVisible && (
         <Animated.View style={[styles.toast, { opacity: toastOpacity }]}>
           <Text style={styles.toastText}>{toastMessage}</Text>
         </Animated.View>
       )}
 
-      {/* 扫码确认弹窗 */}
+      {/* 扫码确认弹窗：显示器件信息，提供确认/位置/取消按钮 */}
       <Modal
         visible={showConfirmModal}
         transparent={true}
@@ -445,6 +495,7 @@ const ScanScreen = ({ navigation, route }) => {
                 上架位置：{currentEmptyPosition ?? 'N/A'}
               </Text>
             </View>
+            {/* 按钮行：确认（左）、位置（中）、取消（右） */}
             <View style={styles.confirmButtonRow}>
               <TouchableOpacity
                 style={styles.confirmButton}
@@ -469,7 +520,7 @@ const ScanScreen = ({ navigation, route }) => {
         </View>
       </Modal>
 
-      {/* 位置选择弹窗 */}
+      {/* 位置选择弹窗：3排×30个位置，点击选择，长按预览亮灯 */}
       <Modal
         visible={showPositionPicker}
         transparent={true}
@@ -479,14 +530,17 @@ const ScanScreen = ({ navigation, route }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.positionModalContent}>
             <Text style={styles.modalTitle}>选择物理位置</Text>
+            {/* 显示当前待上架的器件名称 */}
             {pendingDeviceRef.current && (
               <Text style={styles.positionModalSubtitle}>
                 {pendingDeviceRef.current.name || pendingDeviceRef.current.supplierId}
               </Text>
             )}
+            {/* 位置网格：3排，每排可展开/折叠 */}
             <ScrollView style={styles.positionGrid}>
               {Array.from({ length: 3 }, (_, bankIndex) => (
                 <View key={bankIndex}>
+                  {/* 排标题（点击展开/折叠） */}
                   <TouchableOpacity
                     style={styles.positionBankHeader}
                     onPress={() => setExpandedBank(expandedBank === bankIndex ? null : bankIndex)}
@@ -498,6 +552,7 @@ const ScanScreen = ({ navigation, route }) => {
                       {expandedBank === bankIndex ? '▲' : '▼'}
                     </Text>
                   </TouchableOpacity>
+                  {/* 展开后显示该排的位置格子 */}
                   {expandedBank === bankIndex && (
                     <View style={styles.positionGridInner}>
                       {getAllPositions()
@@ -510,7 +565,7 @@ const ScanScreen = ({ navigation, route }) => {
                               posInfo.isOccupied ? styles.positionItemOccupied : styles.positionItemEmpty,
                             ]}
                             onPress={() => {
-                              if (posInfo.isOccupied) return;
+                              if (posInfo.isOccupied) return; // 已占用的位置不可选择
                               handleSelectPosition(posInfo.position);
                             }}
                             onLongPress={() => handlePositionPreview(posInfo)}
@@ -524,6 +579,7 @@ const ScanScreen = ({ navigation, route }) => {
                             >
                               {posInfo.position}
                             </Text>
+                            {/* 已占用的位置显示器件名称 */}
                             {posInfo.isOccupied && (
                               <Text style={styles.positionItemDeviceName} numberOfLines={1}>
                                 {posInfo.deviceName}
@@ -536,6 +592,7 @@ const ScanScreen = ({ navigation, route }) => {
                 </View>
               ))}
             </ScrollView>
+            {/* 取消按钮：关闭位置选择器，回到确认弹窗 */}
             <TouchableOpacity
               style={styles.modalCancelButton}
               onPress={handleCancelPositionPicker}
@@ -550,6 +607,7 @@ const ScanScreen = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
+  /* ===== 基础布局 ===== */
   container: {
     flex: 1,
     backgroundColor: '#000',
@@ -558,6 +616,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
+
+  /* ===== 相机权限引导页 ===== */
   permissionContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -591,6 +651,8 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 16,
   },
+
+  /* ===== 顶部导航栏 ===== */
   topBar: {
     position: 'absolute',
     top: 50,
@@ -619,6 +681,8 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 60,
   },
+
+  /* ===== 扫码框（四角绿色边框） ===== */
   scanFrame: {
     position: 'absolute',
     top: '30%',
@@ -678,6 +742,8 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 8,
   },
+
+  /* ===== 提示消息 ===== */
   toast: {
     position: 'absolute',
     bottom: 120,
@@ -695,6 +761,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+
+  /* ===== 弹窗通用样式 ===== */
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -725,7 +793,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: 'center',
   },
-  /* 确认弹窗按钮行：取消、位置、确认 */
+
+  /* ===== 确认弹窗按钮行：确认（左）、位置（中）、取消（右） ===== */
   confirmButtonRow: {
     flexDirection: 'row',
     width: '100%',
@@ -767,6 +836,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+
   /* ===== 位置选择弹窗样式 ===== */
   positionModalContent: {
     backgroundColor: 'white',

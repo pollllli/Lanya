@@ -19,134 +19,23 @@ import { logError, formatErrorMessage } from '../utils/ErrorHandler';
 import { useUser } from '../context/UserContext';
 
 const ProfileScreen = ({ navigation, route }) => {
-  const { user, logout, updateUser } = useUser();
+  const { user, updateUser } = useUser();
   const [userInfo, setUserInfo] = useState({
-    username: 'user',
-    role: '普通用户',
+    username: 'admin',
+    role: '管理员',
   });
 
-  // 修改密码相关状态
-  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-
-  // 密码可见性控制
-  const [currentPasswordVisible, setCurrentPasswordVisible] = useState(false);
-  const [newPasswordVisible, setNewPasswordVisible] = useState(false);
-  const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
-
-  // 错误信息
-  const [error, setError] = useState('');
+  // 导出相关状态
+  const [exportFileName, setExportFileName] = useState('');
+  const [showExportModal, setShowExportModal] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      setUserInfo({
-        username: user.username || 'user',
-        role: user.isAdmin ? '管理员' : '普通用户',
-      });
-    }
-  }, [user]);
-
-  const handleLogout = async () => {
-    Alert.alert('确认退出', '确定要退出登录吗？', [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '确定',
-        onPress: async () => {
-          try {
-            await logout();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Login' }],
-            });
-          } catch (error) {
-            logError('退出登录失败', error, 'ProfileScreen.handleLogout');
-            Alert.alert('错误', '退出登录失败，请重试');
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleChangePassword = () => {
-    setShowChangePasswordModal(true);
-  };
-
-  // 处理密码修改
-  const handlePasswordSubmit = async () => {
-    if (
-      !currentPassword.trim() ||
-      !newPassword.trim() ||
-      !confirmPassword.trim()
-    ) {
-      setError('请填写所有密码字段');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError('新密码和确认密码不一致');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setError('新密码长度至少为6个字符');
-      return;
-    }
-
-    try {
-      const users = await StorageService.getUsers();
-
-      const currentUser = users.find(
-        (userItem) => userItem.username === userInfo.username
-      );
-
-      if (!currentUser) {
-        setError('用户不存在');
-        return;
-      }
-
-      if (currentPassword !== currentUser.password) {
-        setError('当前密码错误');
-        return;
-      }
-
-      const updatedUsers = users.map((userItem) =>
-        userItem.username === userInfo.username
-          ? { ...userItem, password: newPassword }
-          : userItem
-      );
-      await StorageService.saveUsers(updatedUsers);
-
-      const updatedUser = { ...currentUser, password: newPassword };
-      await updateUser(updatedUser);
-
-      Alert.alert('成功', '密码修改成功', [
-        {
-          text: '确定',
-          onPress: () => {
-            setShowChangePasswordModal(false);
-            setCurrentPassword('');
-            setNewPassword('');
-            setConfirmPassword('');
-            setError('');
-          },
-        },
-      ]);
-    } catch (error) {
-      logError('修改密码失败', error, 'ProfileScreen.handlePasswordSubmit');
-      setError('修改密码失败，请重试');
-    }
-  };
-
-  // 关闭修改密码模态框
-  const handleCloseModal = () => {
-    setShowChangePasswordModal(false);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setError('');
-  };
+    // 始终为管理员身份
+    setUserInfo({
+      username: 'admin',
+      role: '管理员',
+    });
+  }, []);
 
   const handleAbout = () => {
     Alert.alert(
@@ -155,39 +44,72 @@ const ProfileScreen = ({ navigation, route }) => {
     );
   };
 
-  // 数据备份
-  const handleBackupData = async () => {
+  // 打开导出文件名输入弹窗
+  const handleOpenExportModal = () => {
+    const defaultName = `器件数据_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.json`;
+    setExportFileName(defaultName);
+    setShowExportModal(true);
+  };
+
+  // 关闭导出弹窗
+  const handleCloseExportModal = () => {
+    setShowExportModal(false);
+    setExportFileName('');
+  };
+
+  // 数据导出
+  const handleExportData = async () => {
+    if (!exportFileName.trim()) {
+      Alert.alert('提示', '请输入文件名');
+      return;
+    }
+
     try {
       const backupData = await StorageService.exportAllData();
       const backupJson = JSON.stringify(backupData, null, 2);
 
-      const fileName = `device_backup_${new Date().toISOString().slice(0, 10)}.json`;
-      const fileUri = FileSystem.documentDirectory + fileName;
+      const fileName = exportFileName.endsWith('.json') ? exportFileName : `${exportFileName}.json`;
 
-      await FileSystem.writeAsStringAsync(fileUri, backupJson);
+      // 先写入应用缓存目录
+      const cachePath = `${FileSystem.cacheDirectory}${fileName}`;
+      await FileSystem.writeAsStringAsync(cachePath, backupJson);
 
+      setShowExportModal(false);
+      setExportFileName('');
+
+      // 通过系统分享/保存界面，让用户选择保存位置
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri, {
+        await Sharing.shareAsync(cachePath, {
           mimeType: 'application/json',
-          dialogTitle: '保存备份数据',
+          dialogTitle: '保存导出数据',
           UTI: 'public.json',
         });
       } else {
+        // 不支持分享时，保存到默认文档目录
+        const docPath = `${FileSystem.documentDirectory}${fileName}`;
+        await FileSystem.writeAsStringAsync(docPath, backupJson);
         Alert.alert(
-          '数据备份',
-          `备份成功！\n\n文件: ${fileName}\n导出时间: ${backupData.exportDate}`,
+          '数据导出',
+          `导出成功！\n\n文件: ${fileName}\n导出时间: ${backupData.exportDate}`,
           [{ text: '确定' }]
         );
       }
+
+      // 清理缓存文件
+      try {
+        await FileSystem.deleteAsync(cachePath);
+      } catch (e) {
+        // 忽略清理失败
+      }
     } catch (error) {
-      logError('备份数据失败', error, 'ProfileScreen.handleBackupData');
-      Alert.alert('错误', `备份数据失败: ${error.message || '请重试'}`);
+      logError('导出数据失败', error, 'ProfileScreen.handleExportData');
+      Alert.alert('错误', `导出数据失败: ${error.message || '请重试'}`);
     }
   };
 
-  // 数据恢复
-  const handleRestoreData = async () => {
-    Alert.alert('数据恢复', '此操作将覆盖当前所有数据，确定要继续吗？', [
+  // 数据导入
+  const handleImportData = async () => {
+    Alert.alert('数据导入', '此操作将覆盖当前所有数据，确定要继续吗？', [
       { text: '取消', style: 'cancel' },
       {
         text: '确定',
@@ -209,23 +131,22 @@ const ProfileScreen = ({ navigation, route }) => {
 
             await StorageService.importAllData(backupData);
 
-            Alert.alert('成功', '数据恢复成功！\n\n应用将重启以加载新数据。', [
+            Alert.alert('成功', '数据导入成功！\n\n应用将重启以加载新数据。', [
               {
                 text: '确定',
                 onPress: async () => {
-                  await logout();
                   navigation.reset({
                     index: 0,
-                    routes: [{ name: 'Login' }],
+                    routes: [{ name: 'MainTabs' }],
                   });
                 },
               },
             ]);
           } catch (error) {
-            logError('恢复数据失败', error, 'ProfileScreen.handleRestoreData');
+            logError('导入数据失败', error, 'ProfileScreen.handleImportData');
             Alert.alert(
               '错误',
-              `恢复数据失败: ${error.message || '请检查文件格式并重试'}`
+              `导入数据失败: ${error.message || '请检查文件格式并重试'}`
             );
           }
         },
@@ -251,133 +172,65 @@ const ProfileScreen = ({ navigation, route }) => {
         </View>
 
         <View style={styles.menuContainer}>
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={handleChangePassword}
-          >
-            <Text style={styles.menuText}>修改密码</Text>
+          <TouchableOpacity style={styles.menuItem} onPress={handleOpenExportModal}>
+            <Text style={styles.menuText}>数据导出</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} onPress={handleBackupData}>
-            <Text style={styles.menuText}>数据备份</Text>
-            <Text style={styles.menuArrow}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem} onPress={handleRestoreData}>
-            <Text style={styles.menuText}>数据恢复</Text>
-            <Text style={styles.menuArrow}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.menuItem} onPress={handleAbout}>
-            <Text style={styles.menuText}>关于</Text>
+          <TouchableOpacity style={styles.menuItem} onPress={handleImportData}>
+            <Text style={styles.menuText}>数据导入</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.menuItem, styles.lastMenuItem]}
-            onPress={handleLogout}
+            onPress={handleAbout}
           >
-            <Text style={[styles.menuText, styles.logoutText]}>退出登录</Text>
+            <Text style={styles.menuText}>关于</Text>
+            <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
 
-      {/* 修改密码模态框 */}
+      {/* 数据导出文件名输入弹窗 */}
       <Modal
-        visible={showChangePasswordModal}
+        visible={showExportModal}
         animationType="slide"
         transparent={true}
-        onRequestClose={handleCloseModal}
+        onRequestClose={handleCloseExportModal}
       >
         <KeyboardAvoidingView
           style={styles.modalOverlay}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>修改密码</Text>
-
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            <Text style={styles.modalTitle}>数据导出</Text>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>当前密码</Text>
-              <View style={styles.passwordInputContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  value={currentPassword}
-                  onChangeText={setCurrentPassword}
-                  placeholder="请输入当前密码"
-                  secureTextEntry={!currentPasswordVisible}
-                />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() =>
-                    setCurrentPasswordVisible(!currentPasswordVisible)
-                  }
-                >
-                  <Text style={styles.eyeIcon}>
-                    {currentPasswordVisible ? '👁️' : '👁️‍🗨️'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>新密码</Text>
-              <View style={styles.passwordInputContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  placeholder="请输入新密码"
-                  secureTextEntry={!newPasswordVisible}
-                />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() => setNewPasswordVisible(!newPasswordVisible)}
-                >
-                  <Text style={styles.eyeIcon}>
-                    {newPasswordVisible ? '👁️' : '👁️‍🗨️'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>确认密码</Text>
-              <View style={styles.passwordInputContainer}>
-                <TextInput
-                  style={styles.passwordInput}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  placeholder="请再次输入新密码"
-                  secureTextEntry={!confirmPasswordVisible}
-                />
-                <TouchableOpacity
-                  style={styles.eyeButton}
-                  onPress={() =>
-                    setConfirmPasswordVisible(!confirmPasswordVisible)
-                  }
-                >
-                  <Text style={styles.eyeIcon}>
-                    {confirmPasswordVisible ? '👁️' : '👁️‍🗨️'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.inputLabel}>文件名</Text>
+              <TextInput
+                style={styles.fileNameInput}
+                value={exportFileName}
+                onChangeText={setExportFileName}
+                placeholder="请输入文件名"
+                autoFocus={true}
+              />
+              <Text style={styles.fileNameHint}>默认命名格式：器件数据_日期</Text>
+              <Text style={styles.fileNameHint}>点击导出后可选择保存位置</Text>
             </View>
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
-                onPress={handleCloseModal}
+                onPress={handleCloseExportModal}
               >
                 <Text style={styles.cancelButtonText}>取消</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.submitButton]}
-                onPress={handlePasswordSubmit}
+                onPress={handleExportData}
               >
-                <Text style={styles.submitButtonText}>确定</Text>
+                <Text style={styles.submitButtonText}>导出</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -482,12 +335,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
-  errorText: {
-    color: '#FF3B30',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
   inputContainer: {
     marginBottom: 16,
   },
@@ -496,26 +343,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginBottom: 8,
     color: '#333',
-  },
-  passwordInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  passwordInput: {
-    flex: 1,
-    padding: 12,
-    fontSize: 16,
-  },
-  eyeButton: {
-    padding: 12,
-    marginRight: 8,
-  },
-  eyeIcon: {
-    fontSize: 20,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -545,6 +372,19 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  fileNameInput: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    padding: 12,
+    fontSize: 16,
+  },
+  fileNameHint: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 8,
   },
 });
 

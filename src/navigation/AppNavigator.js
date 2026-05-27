@@ -1,12 +1,11 @@
 /**
  * 应用导航配置
- * 负责管理应用的所有导航路由和登录状态
+ * 负责管理应用的所有导航路由
  */
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import LoginScreen from '../screens/LoginScreen';
 import DeviceListScreen from '../screens/DeviceListScreen';
 import DeviceDetailScreen from '../screens/DeviceDetailScreen';
 import AdminEditScreen from '../screens/AdminEditScreen';
@@ -95,15 +94,16 @@ const MainTabNavigator = () => {
 
 /**
  * 应用主导航组件
- * 负责管理应用的登录状态和路由配置
+ * 负责管理应用的路由配置
  */
 const AppNavigator = () => {
   const { user } = useUser();
+  const isAdmin = user?.isAdmin || true;
 
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName={user ? 'MainTabs' : 'Login'}
+        initialRouteName="MainTabs"
         screenOptions={{
           headerStyle: {
             backgroundColor: '#f5f5f5',
@@ -137,14 +137,6 @@ const AppNavigator = () => {
           },
         }}
       >
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{
-            title: '登录',
-            headerShown: false,
-          }}
-        />
         <Stack.Screen name="MainTabs" options={{ headerShown: false }}>
           {(props) => <MainTabNavigator {...props} />}
         </Stack.Screen>
